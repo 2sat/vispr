@@ -9,3 +9,5 @@ coverage/
 .vercel/
 supabase/.temp/
 supabase/.branches/
+
+.pnpm-store/

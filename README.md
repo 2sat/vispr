@@ -8,4 +8,4 @@ See [the engineering plan](docs/engineering-plan.md) for selected vendors, imple
 
 See [the workstream split](docs/workstreams.md) for parallel development ownership.
 
-Current status: shared foundation in development. See [foundation setup and verification](docs/foundation.md). Live routing, inference and authentication are not connected yet.
+Current status: shared foundation and platform transport implemented. See [foundation setup](docs/foundation.md) and [platform configuration and acceptance](docs/platform.md). Routing/auction integration and live acceptance remain pending.

@@ -12,7 +12,7 @@ pnpm check
 pnpm dev
 ```
 
-The web shell runs on http://localhost:3000. `/api/health` explicitly reports scaffold status. No keys are required for the shell, typechecking, tests or build. There are no live inference endpoints yet. The scaffold is public and contains only sample prompts; it does not claim invite-only auth is implemented.
+The web shell runs on http://localhost:3000. `/api/health` explicitly reports scaffold status. No keys are required for the shell, typechecking, tests or build. The platform now supplies authenticated inference endpoints; see [platform setup and acceptance](platform.md). The scaffold is public and contains only sample prompts; it does not claim invite-only auth is implemented.
 
 Copy `apps/web/.env.example` to `apps/web/.env.local` when implementing integrations. These are placeholders only. Keep all vendor keys server-side. Do not populate preview deployments with production credentials by default.
 
@@ -27,7 +27,7 @@ supabase start
 supabase db reset
 ```
 
-Public signup is disabled in `supabase/config.toml`. Hosted settings must be configured separately and invitation/login verified before a deployed demo serves protected data. Budget account transactions, award/capacity tables/functions, detailed normalized catalog storage, and session persistence follow in their assigned workstreams. Spend reservation rows alone do not enforce the daily budget; do not activate paid inference before atomic spend enforcement exists.
+Public signup is disabled in `supabase/config.toml`. Hosted settings must be configured separately and invitation/login verified before a deployed demo serves protected data. The platform migration adds shared budget enforcement and atomic award/capacity boundaries. Detailed catalog storage and session persistence follow in their assigned workstreams. See the platform handoff before enabling a paid offering.
 
 ## Contracts and fixtures
 
