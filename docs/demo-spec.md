@@ -1,6 +1,6 @@
 # Vispr demo specification
 
-Status: implementation-ready proposal, September 29, 2026. Product decisions below reflect the design discussion; numerical defaults are adjustable starting values, not validated performance claims.
+Status: implementation-ready proposal, September 29, 2026. See [the engineering plan](engineering-plan.md) for the finalized vendor, compatibility, continuity, and budget decisions. Product decisions below reflect the design discussion; numerical defaults are adjustable starting values, not validated performance claims.
 
 ## Product and scope
 
@@ -56,9 +56,9 @@ flowchart LR
   Ingest --> Catalog
 ```
 
-Use a TypeScript monorepo with `apps/web` (Next.js), `packages/sdk`, `packages/routing`, `packages/catalog`, and `packages/providers`. Host the web UI and Node.js route handlers on Vercel. Use the Vercel AI SDK for provider calls and streaming where compatible; the Vispr auction remains the routing authority rather than adding an independent automatic model router.
+Use a TypeScript monorepo with `apps/web` (Next.js), `packages/sdk`, `packages/routing`, `packages/catalog`, and `packages/providers`. Host the web UI and Node.js route handlers on Vercel. Use the Vercel AI SDK with OpenRouter pinned to the elected model/provider for hosted execution, plus a direct compatible adapter for self-hosted inference; the Vispr auction remains the routing authority rather than adding an independent automatic model router.
 
-Use managed PostgreSQL for catalog snapshots, application policies, participants, auctions, bids, usage, and trace events. Do not depend on process-local state surviving requests. Initial bidding adapters execute concurrently inside the bounded auction handler. Persist its deadline and state transitions. A conditional database update permits exactly one winner even under duplicate requests.
+Use Supabase PostgreSQL and invite-only Supabase Auth. Use PostgreSQL for catalog snapshots, application policies, participants, auctions, bids, usage, and trace events. Do not depend on process-local state surviving requests. Initial bidding adapters execute concurrently inside the bounded auction handler. Persist its deadline and state transitions. A conditional database update permits exactly one winner even under duplicate requests.
 
 Vercel Cron triggers bounded, resumable catalog refresh batches. Set route duration limits to the selected deployment plan and use timeouts below those limits. No detached work after a function returns. Long-running ingestion can resume from stored cursors; a separate worker remains an extension point.
 
@@ -85,6 +85,8 @@ Quality utility is a weighted composite of comparable, task-relevant public resu
 For bids, compute `utility = wQuality * quality + wCost * costUtility + wLatency * latencyUtility - uncertaintyPenalty`. Utilities use fixed policy/reference bounds saved with the run, not changing min/max values of competing bids. Expose every term. An alternative mode uses cheapest qualifying bid after quality and latency thresholds. Ties resolve by estimated latency, then stable participant ID.
 
 ## Policy configuration
+
+Settled demo spend defaults: $10/day across the demo and $0.25 per request, including classification and retries. Both are configurable. Real upstream spend is budgeted separately from simulated auction offers.
 
 GUI and SDK serialize the same versioned policy. Include:
 
@@ -115,7 +117,7 @@ An auction is one round of sealed bids. Providers cannot inspect competitors' of
 
 Initial adapter strategies are fixed rate, capacity-adjusted, and bounded discount. All respect configured floors. Capacity acquisition/release is atomic, with expiring reservations and cleanup. Seeded bid simulation supports repeatable walkthroughs while live inference remains variable.
 
-Provider registration supports OpenAI, Anthropic, Google, a configurable hosted open-model provider, and generic OpenAI-compatible endpoints (e.g. operator-run vLLM/Ollama). Register model version, context/output limits, supported features, endpoint, secret reference, deployment configuration, and bid policy. Probe declared protocol features rather than assuming every compatible endpoint supports tools, streaming, images, or structured output.
+Provider registration supports OpenAI, Anthropic, Google and hosted open-model offerings through OpenRouter, and direct generic OpenAI-compatible endpoints (e.g. operator-run vLLM/Ollama). Register model version, context/output limits, supported features, endpoint, secret reference, deployment configuration, and bid policy. Probe declared protocol features rather than assuming every compatible endpoint supports tools, streaming, images, or structured output.
 
 Registered network destinations require authenticated operator control; validate URLs and restrict unintended private-network access in hosted mode. Local mode can explicitly allow loopback/private endpoints. Never expose provider credentials to the browser, SDK consumer, trace, or auction competitors.
 
@@ -152,7 +154,7 @@ Every request links its policy, assessment schema and catalog versions so its se
 
 ## SDK and service boundary
 
-The demo uses the same SDK exposed to external applications. The first integration target is TypeScript/JavaScript; Python and universal drop-in API compatibility are future extensions.
+The demo uses the same SDK exposed to external applications. Provide both a TypeScript/JavaScript SDK and an OpenAI-compatible chat completions endpoint backed by the same service. The engineering plan defines the supported subset. Python SDK and broader API parity remain future extensions.
 
 ```ts
 const vispr = new Vispr({ apiKey: process.env.VISPR_API_KEY });
@@ -167,7 +169,7 @@ for await (const event of run.events) {
 }
 ```
 
-Support text streaming, message history, tool definitions and schema-constrained outputs where the elected deployment supports them. Tool execution remains in the consuming application; subsequent model turns can route again. Capability filtering prevents selecting an endpoint that cannot handle the request. Cancellation propagates upstream. No automatic replay of partial streamed responses or tool actions after failure; the client gets an explicit partial/failure event.
+Support text streaming, message history, tool definitions and schema-constrained outputs where the elected deployment supports them. Tool execution remains in the consuming application. Jev assesses whether subsequent calls need a fresh auction, continuity with the qualifying deployment, or continuity through a tool cycle. Under uncertainty retain a qualifying current deployment; for new tasks use the configured conservative pool. App policy may override automatic continuity. Capability filtering prevents selecting an endpoint that cannot handle the request. Cancellation propagates upstream. No automatic replay of partial streamed responses or tool actions after failure; the client gets an explicit partial/failure event.
 
 Service routes cover inference/streaming and cancellation, request trace retrieval, application/policy management, provider/deployment registration, catalog browsing, manual refresh, and authenticated scheduled refresh. SDK keys are scoped to an application; provider operations require operator credentials.
 
@@ -193,7 +195,7 @@ Internal model-quality evaluations; automated quality learning; real commercial 
 
 ## Setup dependencies
 
-Implementation can proceed without further product input. A live deployed demo eventually needs Vercel/project access, PostgreSQL, a Jev key, an Artificial Analysis key, real inference provider credentials, and a reachable open/self-hosted endpoint. Provision or request these at the relevant milestone. Never embed secrets or substitute fabricated live results.
+Implementation can proceed without further product input. A live deployed demo eventually needs Vercel/project access, PostgreSQL, a Jev key, an Artificial Analysis key, shared OpenRouter credentials/credits, and the developer-owned authenticated self-hosted endpoint currently being prepared. Provision or request these at the relevant milestone. Never embed secrets or substitute fabricated live results.
 
 ## Sources checked
 
