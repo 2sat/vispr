@@ -4,7 +4,7 @@ export function GET() {
   return Response.json({
     service: 'vispr', status: demo ? 'demo' : 'scaffold', contractVersion: CONTRACT_VERSION,
     liveInference: false,
-    responseGeneration: demo && process.env.OPENAI_API_KEY && process.env.VISPR_DEMO_ACCESS_CODE ? 'openai-presenter' : 'prepared',
+    responseGeneration: demo && process.env.OPENAI_API_KEY ? 'openai' : 'prepared',
     routing: demo ? 'simulated' : 'pending',
   });
 }

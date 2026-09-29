@@ -25,7 +25,6 @@ export function Playground({ scenarios, policies, initialScenarioId, runScenario
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [live, setLive] = useState(false);
-  const [presenterCode, setPresenterCode] = useState('');
 
   const policy = policies.find((p) => p.id === policyId) ?? policies[0];
   if (!policy) throw new Error('Playground requires at least one policy.');
@@ -41,7 +40,7 @@ export function Playground({ scenarios, policies, initialScenarioId, runScenario
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result = await runScenario({ scenarioId: scenario.id, policyId, prompt, live, presenterCode });
+      const result = await runScenario({ scenarioId: scenario.id, policyId, prompt, live });
       if (result.ok) setRun(result.run);
       else {
         setRun(null);
@@ -78,8 +77,7 @@ export function Playground({ scenarios, policies, initialScenarioId, runScenario
               <option value="prepared">Prepared demo</option>
               <option value="openai" disabled={!openaiConfigured}>OpenAI response</option>
             </select>
-            {live && <><label htmlFor="presenter-code" className="muted">Presenter code</label>
-              <input id="presenter-code" type="password" className="select" autoComplete="off" value={presenterCode} onChange={e => setPresenterCode(e.target.value)} maxLength={256} /></>}
+
           </div>
           {live && <p className="fine">OpenAI generates the response using bundled sample attachments. Routing and auctions remain simulated.</p>}
           <div className="request__bar">

@@ -97,7 +97,6 @@ export interface RunRequest {
   policyId: string;
   prompt: string;
   live?: boolean;
-  presenterCode?: string;
 }
 
 // ---- Trace ----
