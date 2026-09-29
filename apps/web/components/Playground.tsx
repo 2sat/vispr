@@ -75,11 +75,10 @@ export function Playground({ scenarios, policies, initialScenarioId, runScenario
             <label htmlFor="demo-response-mode" className="muted">Response</label>
             <select id="demo-response-mode" className="select" value={live ? 'openai' : 'prepared'} onChange={e => { setLive(e.target.value === 'openai'); setRun(null); setError(null); }}>
               <option value="prepared">Prepared demo</option>
-              <option value="openai" disabled={!openaiConfigured}>OpenAI response</option>
+              <option value="openai" disabled={!openaiConfigured}>Generate Response</option>
             </select>
 
           </div>
-          {live && <p className="fine">OpenAI generates the response using bundled sample attachments. Routing and auctions remain simulated.</p>}
           <div className="request__bar">
             {scenario.attachments.map((a) => (
               <span key={a} className="chip">{a}</span>
