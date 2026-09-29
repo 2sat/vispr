@@ -9,7 +9,8 @@ export default function PlaygroundPage() {
   return (
     <>
       <AppHeader active="playground" traceHref="/runs/demo-code-debugging" role="Builder" />
-      <Playground scenarios={scenarios} policies={policies} initialScenarioId="code-debugging" runScenario={runScenario} />
+      <Playground scenarios={scenarios} policies={policies} initialScenarioId="code-debugging" runScenario={runScenario}
+        openaiConfigured={Boolean(process.env.OPENAI_API_KEY && process.env.VISPR_DEMO_ACCESS_CODE)} />
     </>
   );
 }
