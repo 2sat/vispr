@@ -77,6 +77,15 @@ export interface RunSummary {
   output: string;
   /** True when the run came from demo fixtures rather than the live SDK path. */
   illustrative: boolean;
+  generation?: {
+    model: string;
+    provider: 'OpenAI';
+    responseId: string;
+    elapsedMs: number;
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostUsd: number;
+  };
 }
 
 export type RunResult =
@@ -87,6 +96,8 @@ export interface RunRequest {
   scenarioId: ScenarioId;
   policyId: string;
   prompt: string;
+  live?: boolean;
+  presenterCode?: string;
 }
 
 // ---- Trace ----
