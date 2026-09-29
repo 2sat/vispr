@@ -1,6 +1,6 @@
 # Vispr engineering plan
 
-Status: planning complete; implementation not started. September 29, 2026.
+Status: planning complete; shared foundation implementation underway. See [foundation handoff](foundation.md) for implemented scope and pending acceptance. September 29, 2026.
 
 Companion: [demo specification](demo-spec.md). This plan records the subsequent engineering decisions and is authoritative for the SDK compatibility scope, vendor selections, session routing, and budgets.
 

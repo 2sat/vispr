@@ -1,6 +1,6 @@
 # Four-workstream development split
 
-Start parallel implementation only after the shared foundation builds and its contracts/fixtures are available. Each device uses its own clone and branch; do not sync live working directories between devices. Branch names below are proposed conventions, not branches created by this document.
+Start parallel implementation only after the shared foundation builds and its contracts/fixtures are available. Four human developers each own a stream. Each device uses its own clone and branch; do not sync live working directories between devices. Branch names below are proposed conventions, not branches created by this document.
 
 | Stream / suggested branch | Ownership | Independent acceptance |
 | --- | --- | --- |

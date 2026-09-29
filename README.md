@@ -8,4 +8,4 @@ See [the engineering plan](docs/engineering-plan.md) for selected vendors, imple
 
 See [the workstream split](docs/workstreams.md) for parallel development ownership.
 
-Current status: specification only; application implementation has not started.
+Current status: shared foundation in development. See [foundation setup and verification](docs/foundation.md). Live routing, inference and authentication are not connected yet.
