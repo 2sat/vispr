@@ -13,9 +13,11 @@
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
-    "typescript": "5.9.3",
-    "vitest": "5.0.2",
+    "@electric-sql/pglite": "0.5.8",
     "@types/node": "26.6.3",
-    "@electric-sql/pglite": "0.5.8"
+    "openai": "7.23.0",
+    "supabase": "2.118.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.2"
   }
 }
