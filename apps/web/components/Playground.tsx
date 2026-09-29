@@ -94,7 +94,7 @@ export function Playground({ scenarios, policies, initialScenarioId, runScenario
               {pending ? 'Running…' : 'Run'}
             </button>
           </div>
-          <div className="request__policy">
+          <div className="request__policy request__policy--settings">
             <Disclosure title="Policy settings" variant="inline">
               <PolicySettings policy={policy} note={scenario.evidenceNote} />
             </Disclosure>
