@@ -36,7 +36,7 @@ export const CatalogSnapshotSchema = z.strictObject({
 });
 export type CatalogSnapshot = z.infer<typeof CatalogSnapshotSchema>;
 
-const ToolCall = z.strictObject({ id, name: id, arguments: z.string() });
+const ToolCall = z.strictObject({ id, name: id, arguments: z.string().refine(value => { try { const parsed = JSON.parse(value); return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed); } catch { return false; } }, 'Tool arguments must be a JSON object') });
 const Content = z.array(z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('text'), text: z.string() }),
   z.strictObject({ type: z.literal('image_url'), url: z.url() }),
@@ -54,6 +54,18 @@ export const InferenceRequestSchema = z.strictObject({
   outputSchema: z.record(z.string(), z.unknown()).optional(),
   temperature: z.number().min(0).max(2).optional(),
   toolChoice: z.enum(['auto', 'none', 'required']).optional(),
+}).superRefine((request, ctx) => {
+  const pending = new Set<string>();
+  const names = request.tools?.map(t => t.name) ?? [];
+  if (new Set(names).size !== names.length) ctx.addIssue({code:'custom',message:'Duplicate tool names'});
+  if (request.toolChoice === 'required' && !names.length) ctx.addIssue({code:'custom',message:'Required tool choice needs tools'});
+  for (const message of request.messages) {
+    if (message.role === 'assistant') for (const call of message.toolCalls ?? []) {
+      if (pending.has(call.id)) ctx.addIssue({code:'custom',message:'Duplicate tool call ID'});
+      pending.add(call.id);
+    }
+    if (message.role === 'tool' && !pending.delete(message.toolCallId)) ctx.addIssue({code:'custom',message:'Tool result requires a preceding unresolved call'});
+  }
 });
 export type InferenceRequest = z.infer<typeof InferenceRequestSchema>;
 export const AssessmentSchema = z.strictObject({
@@ -81,7 +93,7 @@ export const BidSchema = z.strictObject({
 export type Bid = z.infer<typeof BidSchema>;
 export const AwardSchema = z.strictObject({ auctionId: id, bidId: id, deploymentId: id, policyVersion: z.number().int().positive(), catalogSnapshotId: id });
 export type Award = z.infer<typeof AwardSchema>;
-export const UsageSchema = z.strictObject({ inputTokens: z.number().int().nonnegative(), outputTokens: z.number().int().nonnegative(), actualCostMicros: MoneyMicros.nullable(), generationId: id.optional(), finishReason: z.enum(['stop','length','tool_calls','content_filter','unknown']).optional(), reconciliation: z.enum(['pending', 'settled']) })
+export const UsageSchema = z.strictObject({ inputTokens: z.number().int().nonnegative(), outputTokens: z.number().int().nonnegative(), actualCostMicros: MoneyMicros.nullable(), generationId: id.optional(), servingProvider: id.optional(), finishReason: z.enum(['stop','length','tool_calls','content_filter','unknown']).optional(), reconciliation: z.enum(['pending', 'settled']) })
   .refine(u => u.reconciliation !== 'settled' || u.actualCostMicros !== null, 'Settled usage requires known cost');
 export type Usage = z.infer<typeof UsageSchema>;
 export const ErrorCodeSchema = z.enum(['UNAUTHORIZED', 'INVALID_REQUEST', 'BUDGET_EXCEEDED', 'CLASSIFIER_UNAVAILABLE', 'NO_ELIGIBLE_MODELS', 'NO_BIDS', 'PROVIDER_FAILED', 'CANCELLED', 'NOT_CONFIGURED']);

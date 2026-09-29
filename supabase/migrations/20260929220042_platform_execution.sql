@@ -5,6 +5,7 @@ alter table public.inference_requests add column dispatched_at timestamptz;
 alter table public.inference_requests add column generation_id text;
 alter table public.inference_requests add column transport text;
 alter table public.inference_requests add column serving_identity text;
+alter table public.inference_requests add column selected_deployment jsonb;
 alter table public.inference_requests add column usage jsonb;
 create table public.execution_offerings (
  application_id uuid not null, policy_id text not null, policy_version integer not null,
@@ -40,7 +41,8 @@ end $$;
 create function public.mark_dispatched(p_app uuid,p_request uuid) returns boolean language plpgsql set search_path = '' as $$
 begin
  update public.inference_requests set dispatched_at = now(), status = 'executing'
- where id = p_request and application_id = p_app and status = 'created' and not cancel_requested;
+ where id = p_request and application_id = p_app and status in ('created','awarded') and dispatched_at is null and not cancel_requested
+ and exists(select 1 from public.spend_reservations where request_id=p_request and application_id=p_app and status='reserved');
  return found;
 end $$;
 create function public.finish_execution(p_app uuid,p_request uuid,p_status text,p_usage jsonb default null)
@@ -54,7 +56,7 @@ begin
  update public.spend_reservations set actual_cost_micros = cost,
  status = case when cost is not null then 'settled' when dispatched is null then 'released' else 'uncertain' end
  where request_id = p_request and application_id = p_app and status in ('reserved','uncertain');
- update public.inference_requests set status=p_status,usage=coalesce(p_usage,usage),generation_id=coalesce(p_usage->>'generationId',generation_id)
+ update public.inference_requests set status=p_status,usage=coalesce(p_usage,usage),generation_id=coalesce(p_usage->>'generationId',generation_id),serving_identity=coalesce(p_usage->>'servingProvider',serving_identity)
  where id=p_request and application_id=p_app;
 end $$;
 revoke all on function public.begin_execution(uuid,text,text,integer,bigint,bigint,bigint), public.mark_dispatched(uuid,uuid), public.finish_execution(uuid,uuid,text,jsonb) from public,anon,authenticated;
@@ -107,17 +109,18 @@ declare slots integer; used integer; result uuid;
 begin
  select capacity into slots from public.provider_deployments where id=p_deployment and verified_at is not null and deployment->>'status'='active' for update;
  if not found then raise exception 'DEPLOYMENT_UNAVAILABLE'; end if;
- if p_expires<=now() then raise exception 'INVALID_EXPIRY'; end if;
- if not exists(select 1 from public.auctions where id=p_auction and status='bidding' and deadline>now()) then raise exception 'AUCTION_CLOSED'; end if;
- select count(*) into used from public.capacity_reservations where deployment_id=p_deployment and (status='executing' or(status='reserved' and expires_at>now()));
+ if p_expires<=clock_timestamp() then raise exception 'INVALID_EXPIRY'; end if;
+ if not exists(select 1 from public.auctions where id=p_auction and status='bidding' and deadline>clock_timestamp()) then raise exception 'AUCTION_CLOSED'; end if;
+ select count(*) into used from public.capacity_reservations where deployment_id=p_deployment and (status='executing' or(status='reserved' and expires_at>clock_timestamp()));
  if used>=slots then raise exception 'CAPACITY_EXCEEDED'; end if;
  insert into public.capacity_reservations(deployment_id,auction_id,expires_at)values(p_deployment,p_auction,p_expires)returning token into result;
  return result;
 end $$;
 create function public.submit_bid(p_id text,p_auction uuid,p_deployment text,p_token uuid,p_bid jsonb,p_valid_until timestamptz) returns void language plpgsql set search_path='' as $$
+declare closes timestamptz;
 begin
- perform 1 from public.auctions where id=p_auction and status='bidding' and deadline>clock_timestamp() for update;
- if not found then raise exception 'AUCTION_CLOSED'; end if;
+ select deadline into closes from public.auctions where id=p_auction and status='bidding' for update;
+ if not found or closes<=clock_timestamp() then raise exception 'AUCTION_CLOSED'; end if;
  if p_valid_until<=clock_timestamp() then raise exception 'BID_EXPIRED'; end if;
  if not exists(select 1 from public.capacity_reservations where token=p_token and auction_id=p_auction and deployment_id=p_deployment and status='reserved' and expires_at>clock_timestamp()) then raise exception 'INVALID_CAPACITY'; end if;
  insert into public.bids(id,auction_id,deployment_id,reservation_token,bid,valid_until)values(p_id,p_auction,p_deployment,p_token,p_bid,p_valid_until);
@@ -131,6 +134,8 @@ begin
  if not found then raise exception 'BID_EXPIRED'; end if;
  -- Serialize acquisition and award for this deployment. Executing capacity never expires automatically.
  perform 1 from public.provider_deployments where id=chosen.deployment_id for update;
+ if chosen.valid_until<=clock_timestamp() then raise exception 'BID_EXPIRED'; end if;
+ if not exists(select 1 from public.spend_reservations where request_id=request and status='reserved') then raise exception 'BUDGET_REQUIRED'; end if;
  update public.capacity_reservations set status='executing' where token=chosen.reservation_token and status='reserved' and expires_at>clock_timestamp();
  if not found then raise exception 'INVALID_CAPACITY'; end if;
  update public.inference_requests set status='awarded' where id=request and status in ('created','bidding') and not cancel_requested;
@@ -158,3 +163,16 @@ begin
 end $$;
 revoke all on function public.release_undispatched() from public,anon,authenticated;
 grant execute on function public.release_undispatched() to service_role;
+-- Runtime loss does not release spend or capacity. Recover known generations for lookup.
+create function public.mark_stale_executions() returns integer language plpgsql set search_path='' as $$
+declare marked integer;
+begin
+ with stale as (
+ update public.inference_requests set status='failed',usage=coalesce(usage,'{"inputTokens":0,"outputTokens":0,"actualCostMicros":null,"reconciliation":"pending"}'::jsonb)
+ where status='executing' and dispatched_at<now()-interval '1 hour' returning id
+ ) update public.spend_reservations set status='uncertain' where request_id in(select id from stale) and status='reserved';
+ get diagnostics marked = row_count;
+ return marked;
+end $$;
+revoke all on function public.mark_stale_executions() from public,anon,authenticated;
+grant execute on function public.mark_stale_executions() to service_role;
