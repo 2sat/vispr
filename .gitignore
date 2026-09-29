@@ -11,3 +11,6 @@ supabase/.temp/
 supabase/.branches/
 
 .pnpm-store/
+.vercel
+
+.local-model/
