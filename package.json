@@ -1,0 +1,25 @@
+{
+  "name": "vispr",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @vispr/web",
+    "build": "npm run build --workspace @vispr/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:status": "supabase status",
+    "db:env": "node scripts/local-env.mjs"
+  },
+  "devDependencies": {
+    "supabase": "latest",
+    "typescript": "latest"
+  }
+}
