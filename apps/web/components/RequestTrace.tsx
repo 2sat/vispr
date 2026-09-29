@@ -1,0 +1,212 @@
+import { Disclosure } from './Disclosure';
+import { explainWinner, fmtMs, fmtRate, fmtTokens, fmtUsd, rankBids } from '../lib/format';
+import type { TraceView } from '../lib/types';
+
+const strategyLabel = { fixed: 'fixed rate', 'capacity-adjusted': 'capacity-adjusted', 'bounded-discount': 'bounded discount' } as const;
+
+export function RequestTrace({ trace }: { trace: TraceView }) {
+  const { run, policy, assessment, pool, auction, versions } = trace;
+  const w = policy.weights;
+  const ranked = rankBids(auction.bids, w);
+  const winner = ranked[0];
+  const late = auction.bids.filter((b) => b.status === 'rejected').length;
+  const t = run.timing;
+  const routingMs = t.classificationMs + t.selectionMs + t.auctionMs;
+  const firstTokenWaitMs = t.firstTokenMs - routingMs;
+  const streamingMs = t.totalMs - t.firstTokenMs;
+  const pct = (ms: number) => `${(ms / t.totalMs) * 100}%`;
+  // Timeline spans slightly past the deadline so late bids stay visible.
+  const span = Math.max(auction.deadlineMs * 1.2, ...auction.bids.map((b) => b.arrivedMs + 20));
+  const at = (ms: number) => `${(ms / span) * 100}%`;
+
+  return (
+    <div className="trace">
+      <div className="trace__title">
+        <h1>How this request was routed</h1>
+        <span className="muted">{trace.scenarioName} · completed in {fmtMs(t.totalMs)}</span>
+        {run.illustrative && <span className="badge-warn">Illustrative data</span>}
+      </div>
+
+      <ol aria-label="Routing steps" className="steps">
+        <li className="step">
+          <span className="step__n">1 · Understand</span>
+          <strong>{assessment.taskFamilyLabel}, {assessment.complexity} complexity</strong>
+          <span className="muted">
+            Jev is {Math.round(assessment.confidence * 100)}% confident
+            {assessment.extracted.toolSchemas > 0 && ' · needs tool calls'}
+          </span>
+        </li>
+        <li className="step">
+          <span className="step__n">2 · Shortlist</span>
+          <strong>{pool.invitedCount} of {pool.consideredCount} models qualify</strong>
+          <span className="muted">Filtered on public benchmarks and capabilities</span>
+        </li>
+        <li className="step">
+          <span className="step__n">3 · Auction</span>
+          <strong>{ranked.length} valid sealed bids</strong>
+          <span className="muted">
+            Within {auction.deadlineMs} ms{late > 0 && ` · ${late} late bid${late > 1 ? 's' : ''} rejected`}
+          </span>
+        </li>
+        <li className="step step--winner">
+          <span className="step__n">4 · Route</span>
+          <strong>{winner ? `${winner.model} · ${winner.provider}` : 'No winner'}</strong>
+          <span>Best score for the {policy.id} policy</span>
+        </li>
+      </ol>
+
+      {winner && (
+        <section aria-label="Why this model won" className="card why">
+          <h2>Why {winner.model} won</h2>
+          <p className="muted">{explainWinner(ranked, w)}</p>
+          <div className="why__bars">
+            {ranked.map((b, i) => (
+              <div key={b.deploymentId} className="why__row">
+                <span className={i === 0 ? 'strong' : undefined}>{b.model}</span>
+                <span className="bar bar--lg">
+                  <span className={`bar__fill ${i === 0 ? 'bar__fill--quality' : 'bar__fill--neutral'}`} style={{ width: `${b.score.total * 100}%` }} />
+                </span>
+                <span className={`mono num ${i === 0 ? 'strong' : ''}`}>{b.score.total.toFixed(3)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section aria-label="Details" className="card details">
+        <Disclosure title="Score breakdown" hint="Each term of the utility formula">
+          <p className="mono muted">
+            utility = {w.quality / 100} × quality + {w.cost / 100} × cost + {w.latency / 100} × speed − uncertainty penalty
+          </p>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Bid</th><th>Quality (× {w.quality / 100})</th><th>Cost (× {w.cost / 100})</th>
+                <th>Speed (× {w.latency / 100})</th><th>Penalty</th><th className="num">Utility</th>
+              </tr>
+            </thead>
+            <tbody className="mono">
+              {ranked.map((b, i) => (
+                <tr key={b.deploymentId} className={i === 0 ? 'strong' : undefined}>
+                  <td className="sans">{b.model}</td>
+                  <td>{b.utilities.quality.toFixed(2)} → {b.score.quality.toFixed(3)}</td>
+                  <td>{b.utilities.cost.toFixed(2)} → {b.score.cost.toFixed(3)}</td>
+                  <td>{b.utilities.latency.toFixed(2)} → {b.score.latency.toFixed(3)}</td>
+                  <td>{b.score.penalty}</td>
+                  <td className="num">{b.score.total.toFixed(3)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="fine">
+            Quality is a normalized composite of public benchmark results — a routing proxy, not a success probability.
+            Cost and speed are scored against fixed bounds saved with this run, so one bid never shifts another’s score.
+          </p>
+        </Disclosure>
+
+        <Disclosure title="Excluded models" hint={`${pool.excluded.length} filtered before the auction`}>
+          <table className="table">
+            <thead><tr><th>Model · deployment</th><th>Reason</th><th>What would change it</th></tr></thead>
+            <tbody>
+              {pool.excluded.map((x) => (
+                <tr key={`${x.model}-${x.deployment}`}>
+                  <td>{x.model} · {x.deployment}</td>
+                  <td className="danger">{x.reason}</td>
+                  <td className="muted">{x.remedy ?? 'Hard requirement — can’t be relaxed'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Disclosure>
+
+        <Disclosure title="Bids" hint={`${auction.bids.length} received · ${ranked.length} valid · deadline ${auction.deadlineMs} ms`}>
+          <div className="timeline" aria-hidden="true">
+            <span className="timeline__axis" />
+            <span className="timeline__deadline" style={{ left: at(auction.deadlineMs) }}>deadline</span>
+            {auction.bids.map((b) => (
+              <span
+                key={b.deploymentId}
+                className={`timeline__dot timeline__dot--${b.status}`}
+                style={{ left: at(b.arrivedMs) }}
+                title={`${b.model} · ${b.arrivedMs} ms`}
+              />
+            ))}
+          </div>
+          <table className="table">
+            <thead>
+              <tr><th>Deployment</th><th>Arrived</th><th>In / out per Mtok</th><th>Strategy</th><th>Queue delay</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {auction.bids.map((b) => (
+                <tr key={b.deploymentId} className={b.status === 'awarded' ? 'strong' : undefined}>
+                  <td>{b.model}</td>
+                  <td className="mono">{b.arrivedMs} ms</td>
+                  <td className="mono">{fmtRate(b.inputUsdPerMtok)} / {fmtRate(b.outputUsdPerMtok)}</td>
+                  <td>{strategyLabel[b.strategy]}</td>
+                  <td className="mono">{b.declaredQueueMs === null ? '—' : `${b.declaredQueueMs} ms declared`}</td>
+                  <td className={b.status === 'rejected' ? 'danger' : 'ok'}>
+                    {b.status === 'awarded' ? 'valid · awarded' : b.status === 'rejected' ? `rejected · ${b.rejectReason ?? ''}` : 'valid'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="fine">
+            Bids were sealed. Invitations carried only an auction ID, each bidder’s eligible offering IDs, the deadline and
+            protocol version — no prompt, classification or app weights. Rates are simulated demo offers, not vendor discounts.
+          </p>
+        </Disclosure>
+
+        <Disclosure title="Timing & cost" hint={`${fmtMs(routingMs)} routing overhead · ${fmtUsd(run.cost.estimatedUpstreamUsd)} estimated`}>
+          <div className="split">
+            <div>
+              <div className="stack-bar" aria-hidden="true">
+                <span className="seg seg--class" style={{ width: pct(t.classificationMs) }} />
+                <span className="seg seg--select" style={{ width: pct(t.selectionMs) }} />
+                <span className="seg seg--auction" style={{ width: pct(t.auctionMs) }} />
+                <span className="seg seg--wait" style={{ width: pct(firstTokenWaitMs) }} />
+                <span className="seg seg--stream" style={{ width: pct(streamingMs) }} />
+              </div>
+              <dl className="kv legend">
+                <dt><i className="seg--class" />Classification (Jev)</dt><dd>{fmtMs(t.classificationMs)}</dd>
+                <dt><i className="seg--select" />Selection</dt><dd>{fmtMs(t.selectionMs)}</dd>
+                <dt><i className="seg--auction" />Auction</dt><dd>{fmtMs(t.auctionMs)}</dd>
+                <dt><i className="seg--wait" />Wait for first token</dt><dd>{fmtMs(firstTokenWaitMs)}</dd>
+                <dt><i className="seg--stream" />Streaming</dt><dd>{fmtMs(streamingMs)}</dd>
+                <dt className="strong">Total</dt><dd className="strong">{fmtMs(t.totalMs)}</dd>
+              </dl>
+            </div>
+            <div>
+              <dl className="kv">
+                <dt>Tokens in / out</dt>
+                <dd>{run.usage ? `${fmtTokens(run.usage.inputTokens)} / ${fmtTokens(run.usage.outputTokens)}` : '—'}</dd>
+                <dt>Simulated auction quote</dt><dd>{fmtUsd(run.cost.simulatedQuoteUsd)}</dd>
+                <dt>Estimated upstream cost</dt><dd>{fmtUsd(run.cost.estimatedUpstreamUsd)}</dd>
+                <dt>Usage-derived upstream cost</dt><dd>{fmtUsd(run.cost.usageDerivedUpstreamUsd)}</dd>
+                <dt>Actual provider bill</dt><dd>{fmtUsd(run.cost.actualBillingUsd, 'unavailable')}</dd>
+                <dt>Run budget used (incl. Jev)</dt>
+                <dd>{run.cost.runBudgetUsd === null ? 'no budget set' : `${fmtUsd(run.cost.runBudgetUsedUsd)} of ${fmtUsd(run.cost.runBudgetUsd)}`}</dd>
+              </dl>
+              <p className="fine">Estimates can differ from the provider’s bill. Figures are kept separate rather than blended.</p>
+            </div>
+          </div>
+        </Disclosure>
+
+        <Disclosure title="Run record" hint="Versions for reproducing this decision">
+          <dl className="kv kv--wide">
+            <dt>Run ID</dt><dd>{run.runId}</dd>
+            <dt>Idempotency key</dt><dd>{versions.idempotencyKey}</dd>
+            <dt>Policy</dt><dd>{policy.id} · v{policy.version}</dd>
+            <dt>Catalog snapshot</dt><dd>{versions.catalogSnapshotId}{versions.catalogRefreshedAt && ` · refreshed ${versions.catalogRefreshedAt}`}</dd>
+            <dt>Jev model · question schema</dt><dd>{versions.jevModelVersion} · {versions.assessmentSchemaVersion}</dd>
+            <dt>Benchmark profile</dt><dd>{versions.benchmarkProfile}</dd>
+            <dt>Auction states</dt><dd>{trace.auctionStates.join(' → ')}</dd>
+            <dt>Fallback</dt><dd className="sans">{trace.fallback ?? 'Not used'}</dd>
+            <dt>Stored content</dt>
+            <dd className="sans">{trace.storedContent === 'metadata' ? 'Trace metadata only; prompt and response not retained' : 'Full prompt and response retained'}</dd>
+          </dl>
+        </Disclosure>
+      </section>
+    </div>
+  );
+}
