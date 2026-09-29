@@ -5,12 +5,12 @@ import { axes, explore, illustrativeModels, sortModels, type Axis, type Benchmar
 const benchmarks: Benchmark[] = ['coding', 'reasoning', 'design'];
 const defaults: ExplorerBands = { maxCost: .02, maxLatency: 5, benchmarks: { coding: 60, reasoning: 60, design: 55 } };
 const format = (axis: Axis, value: number | null) => value === null ? 'Unknown' : axis === 'cost' ? `$${value.toFixed(4)}` : axis === 'latency' ? `${value.toFixed(1)}s` : value.toLocaleString('en-US', { maximumFractionDigits: 1 });
-export function ModelExplorer({ discovery, retrievedAt }: { discovery: ExplorerModel[]; retrievedAt: string }) {
-  const [dataset, setDataset] = useState<'illustrative' | 'discovery'>('illustrative');
+export function ModelExplorer({ discovery, retrievedAt, initialDataset = 'illustrative' }: { discovery: ExplorerModel[]; retrievedAt: string; initialDataset?: 'illustrative' | 'discovery' }) {
+  const [dataset, setDataset] = useState<'illustrative' | 'discovery'>(initialDataset);
   const [bands, setBands] = useState<ExplorerBands>(defaults);
   const [inputTokens, setInputTokens] = useState(1000), [outputTokens, setOutputTokens] = useState(500);
-  const [x, setX] = useState<Axis>('cost'), [y, setY] = useState<Axis>('coding');
-  const [sort, setSort] = useState<Axis>('cost'), [selected, setSelected] = useState('balanced');
+  const [x, setX] = useState<Axis>('cost'), [y, setY] = useState<Axis>(initialDataset === 'discovery' ? 'context' : 'coding');
+  const [sort, setSort] = useState<Axis>('cost'), [selected, setSelected] = useState(initialDataset === 'discovery' ? discovery[0]?.id ?? '' : 'balanced');
   const [frontierOnly, setFrontierOnly] = useState(false);
   const [copied, setCopied] = useState('');
   const rows = useMemo(() => explore(dataset === 'illustrative' ? illustrativeModels : discovery, bands, inputTokens, outputTokens), [dataset, discovery, bands, inputTokens, outputTokens]);
@@ -25,7 +25,7 @@ export function ModelExplorer({ discovery, retrievedAt }: { discovery: ExplorerM
     catch { setCopied('Clipboard unavailable in this browser.'); }
   }
   return <main className="explorer">
-    <div className="explorer__heading"><div><p className="eyebrow">Model selection / Explore the tradeoffs</p><h1>Find the shape of your pool.</h1><p className="muted">Latency, task cost, and every benchmark that matters to the invocation.</p></div><div className="explorer__dataset"><label htmlFor="dataset">Evidence set</label><select id="dataset" className="select" value={dataset} onChange={e => { const next = e.target.value as typeof dataset; setDataset(next); setSelected(next === 'illustrative' ? 'balanced' : discovery[0]!.id); setY(next === 'illustrative' ? 'coding' : 'context'); setFrontierOnly(false); }}><option value="illustrative">Illustrative model space</option><option value="discovery">Sourced model discovery</option></select></div></div>
+    <div className="explorer__heading"><div><p className="eyebrow">Model selection / Explore the tradeoffs</p><h1>{dataset === 'discovery' ? 'Model catalog' : 'Find the shape of your pool.'}</h1><p className="muted">Latency, task cost, and every benchmark that matters to the invocation.</p></div><div className="explorer__dataset"><label htmlFor="dataset">Evidence set</label><select id="dataset" className="select" value={dataset} onChange={e => { const next = e.target.value as typeof dataset; setDataset(next); setSelected(next === 'illustrative' ? 'balanced' : discovery[0]!.id); setY(next === 'illustrative' ? 'coding' : 'context'); setFrontierOnly(false); }}><option value="illustrative">Illustrative model space</option><option value="discovery">Sourced model discovery</option></select></div></div>
     <div className="explorer__notice" role="note">{dataset === 'illustrative' ? <><strong>Illustrative data</strong><span>Fictional models and scores demonstrate the selection geometry. No inference is dispatched.</span></> : <><strong>Discovery snapshot · {retrievedAt.slice(0, 10)}</strong><span>Advertised starting prices and context limits. Missing verified benchmark and completion-time evidence stays unknown; these are not auction-ready models.</span></>}</div>
     <div className="explorer__layout">
       <aside className="card explorer__controls" aria-label="Pool bands"><div className="explorer__section-head"><h2>Define the pool</h2><button className="explorer__text-button" onClick={reset}>Reset</button></div><p className="fine">Bands are hard limits. An advantage on one axis cannot cancel a failed limit on another.</p>

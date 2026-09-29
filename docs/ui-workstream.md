@@ -11,7 +11,7 @@ Screens composed from `components/` and fed by `lib/`:
 - **Provider console** (`/providers/console`, operator role) — registered deployments with availability, connection status and bid strategy. `lib/bidding.ts` holds `quoteBid`, so the console preview and the simulated bidding adapters agree on what an offering would quote; floors always win. `force-dynamic`, since operator data changes per request.
 - **Request trace** (`/runs/[runId]`) — the routing decision for one run: ordered routing steps, a plain-language "why this model won" summary, then progressive disclosure for score breakdown, excluded models, bids, timing/cost and the run record.
 
-Presentation notes: `Disclosure` keeps trace detail collapsed by default. `AppHeader` includes Model explorer and a Manage menu with the live provider console at `/providers/console`. Applications and Catalog remain disabled until their pages exist. Fonts and design tokens live in `app/vispr.css`.
+Presentation notes: `Disclosure` keeps trace detail collapsed by default. `AppHeader` includes Model explorer and a Manage menu with the live provider console at `/providers/console`. Model catalog (`/catalog`) opens the sourced inventory with prices, context limits and explicit evidence gaps. Applications remains disabled until its page exists. Fonts and design tokens live in `app/vispr.css`.
 
 There is no `/` route yet; enter at `/playground`.
 

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 const manageLinks = [
   { id: 'applications', href: '/applications', title: 'Applications & policies', desc: 'API keys, saved policies, limits, fallbacks' },
   { id: 'providers-console', href: '/providers/console', title: 'Provider console', desc: 'Endpoints, offerings, bid strategy, capacity' },
-  { id: 'catalog', href: '/catalog', title: 'Model catalog', desc: 'Benchmarks, pricing, sources, refresh history' },
+  { id: 'catalog', href: '/catalog', title: 'Model catalog', desc: 'Sourced inventory, pricing, context, evidence gaps' },
 ];
 
 interface AppHeaderProps {
@@ -69,7 +69,7 @@ function ManageMenu({ active }: { active: AppHeaderProps['active'] }) {
       </button>
       {open && (
         <div className="menu__panel">
-          {manageLinks.map((l) => l.id !== 'providers-console' ? (
+          {manageLinks.map((l) => l.id === 'applications' ? (
             <div key={l.href} className="menu__item menu__item--unavailable" aria-disabled="true">
               <span className="menu__title">{l.title}</span>
               <span className="menu__desc">{l.desc}</span>
