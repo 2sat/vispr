@@ -206,3 +206,11 @@ Implementation can proceed without further product input. A live deployed demo e
 3. [Artificial Analysis data API](https://artificialanalysis.ai/api-reference).
 4. [Vercel Cron management](https://vercel.com/docs/cron-jobs/manage-cron-jobs): secure the scheduled route and account for function duration limits.
 5. [AI SDK OpenAI-compatible providers](https://ai-sdk.dev/providers/openai-compatible-providers): adapter foundation for compatible endpoints.
+
+## Invocation source presets
+
+Implemented in the contracts/SDK/routing libraries: optional source tags map to app-owned named model pools, with exact-match validation and hard pool boundaries across cache hits, continuity and conservative fallback. Jev still classifies within the boundary; all hard constraints apply. See [source routing](source-routing.md) for configuration, SDK examples, validation and the platform/UI handoff. Durable configuration, HTTP transport and a Sources settings editor remain integration work.
+
+### Dynamic pool dimensions
+
+Source presets now accept inclusive latency and task-capacity/cost bands plus N independent inference-benchmark score bands. Model/deployment lists are optional restrictions. Each benchmark remains a coordinate in the Pareto sort space, with version, direction, evidence and freshness; the weighted quality summary is only an additional application preference/gate, not a replacement for these axes. Dynamic membership and hard bands are rechecked after semantic cache reuse and against final offers. See [source routing](source-routing.md) for schema/examples and the GUI handoff.

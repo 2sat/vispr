@@ -80,7 +80,9 @@ Test against a real OpenAI-compatible client in addition to the native SDK, usin
 
 ## Classification batching and cache
 
-Implement [the batching/cache design](classification-design.md) within the routing workstream: one TypeSafe request for independent task/complexity/continuity judgments, and a bounded tenant-scoped exact cache of validated assessments. Do not cache eligible pools, offers or spend authorization. The cache key includes relevant request/history, session/capability context and model/question/preprocessing revisions. Reapply current policy, evidence, endpoint state and budgets after every hit.
+Library implementation and validation are complete; see [routing handoff](routing-workstream.md) for the integration sequence. Authenticated session persistence, atomic budget/award transactions, API dispatch and UI configuration remain integration work.
+
+The routing libraries implement [the batching/cache design](classification-design.md) within the routing workstream: one TypeSafe request for independent task/complexity/continuity judgments, and a bounded tenant-scoped exact cache of validated assessments. Do not cache eligible pools, offers or spend authorization. The cache key includes relevant request/history, session/capability context and model/question/preprocessing revisions. Reapply current policy, evidence, endpoint state and budgets after every hit.
 
 Start with a configurable five-minute TTL and 256-entry local cache behind a replaceable interface; production shared storage is platform-owned. Process-local hits on Vercel are opportunistic. Trace hit/miss, classification source, preprocessing/lookup/network/parsing times and paid attempts separately. Verify call batching and cache isolation/invalidation before enabling the live adapter.
 
@@ -159,3 +161,11 @@ Use application trace tables and structured Vercel logs initially; an extra obse
 3. [Supabase user invitations](https://supabase.com/docs/guides/auth/users) and [auth configuration](https://supabase.com/docs/guides/auth/general-configuration).
 4. [Artificial Analysis API](https://artificialanalysis.ai/api-reference).
 5. [Vercel Cron management](https://vercel.com/docs/cron-jobs/manage-cron-jobs).
+
+## Invocation source presets
+
+Implemented in the contracts/SDK/routing libraries: optional source tags map to app-owned named model pools, with exact-match validation and hard pool boundaries across cache hits, continuity and conservative fallback. Jev still classifies within the boundary; all hard constraints apply. See [source routing](source-routing.md) for configuration, SDK examples, validation and the platform/UI handoff. Durable configuration, HTTP transport and a Sources settings editor remain integration work.
+
+### Dynamic pool dimensions
+
+Source presets now accept inclusive latency and task-capacity/cost bands plus N independent inference-benchmark score bands. Model/deployment lists are optional restrictions. Each benchmark remains a coordinate in the Pareto sort space, with version, direction, evidence and freshness; the weighted quality summary is only an additional application preference/gate, not a replacement for these axes. Dynamic membership and hard bands are rechecked after semantic cache reuse and against final offers. See [source routing](source-routing.md) for schema/examples and the GUI handoff.

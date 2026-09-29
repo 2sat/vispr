@@ -139,3 +139,54 @@ describe('pre-push boundary review', () => {
     expect(selectCandidates(input, context)).toEqual(first);
   });
 });
+
+describe('multidimensional pool criteria', () => {
+  it('keeps benchmark tradeoffs on the frontier even when one aggregate is better', () => {
+    const { input, context } = setup();
+    input.policy.minimumQuality = 0; context.selection = { paretoOnly: true };
+    input.catalog.deployments.push({ ...deployment, id: 'b', modelId: 'model-b' });
+    context.metrics = { ...context.metrics, b: context.metrics.a! };
+    context.profiles = { coding: [...context.profiles.coding!, { benchmark: 'reasoning', version: 'v1', weight: 1, minimum: 0, maximum: 100, higherIsBetter: true }] };
+    input.catalog.benchmarks.push(
+      { ...input.catalog.benchmarks[0]!, benchmark: 'reasoning', value: 60 },
+      { ...input.catalog.benchmarks[0]!, modelId: 'model-b', value: 50 },
+      { ...input.catalog.benchmarks[0]!, modelId: 'model-b', benchmark: 'reasoning', value: 80 },
+    );
+    const result = selectCandidates(input, context);
+    expect(result.every(c => c.eligible)).toBe(true);
+    expect(result[0]!.benchmarkAxes.map(a => a.normalizedScore)).toEqual([.8, .6]);
+    input.catalog.benchmarks.at(-1)!.value = 50;
+    expect(selectCandidates(input, context).find(c => c.deploymentId === 'b')!.eligible).toBe(false);
+  });
+  it('applies inclusive bands and independent measured benchmark gates', () => {
+    const { input, context } = setup();
+    context.poolCriteria = { latencyMs: { min: 500, max: 500 }, estimatedCostMicros: { max: 4600 }, contextTokens: { min: 10000 }, maxOutputTokens: { min: 2000 }, requiredCapabilities: ['tools'], benchmarks: [{ ...context.profiles.coding![0]!, minimumNormalizedScore: .8, maximumNormalizedScore: .9 }] };
+    expect(selectCandidates(input, context)[0]!.eligible).toBe(true);
+    input.catalog.benchmarks[0]!.value = 79;
+    expect(selectCandidates(input, context)[0]!.reasons).toContain('Benchmark minimum not met: coding');
+    input.catalog.benchmarks[0]!.value = 95;
+    expect(selectCandidates(input, context)[0]!.reasons).toContain('Benchmark maximum exceeded: coding');
+    input.catalog.benchmarks[0]!.evidence = 'proxy'; input.policy.allowIncompleteCoverage = true;
+    expect(selectCandidates(input, context)[0]!.reasons).toContain('Required measured evidence missing: coding');
+  });
+  it('fails closed on missing axes and conflicting normalization and bands', () => {
+    const { input, context } = setup();
+    context.poolCriteria = { benchmarks: [{ ...context.profiles.coding![0]!, benchmark: 'unmeasured' }] };
+    input.policy.allowIncompleteCoverage = true;
+    expect(selectCandidates(input, context)[0]!.reasons).toContain('Required measured evidence missing: unmeasured');
+    context.poolCriteria = { benchmarks: [{ ...context.profiles.coding![0]!, maximum: 1 }] };
+    expect(() => selectCandidates(input, context)).toThrow('Conflicting benchmark normalization');
+    context.poolCriteria = { latencyMs: { min: 500, max: 499 } };
+    expect(() => selectCandidates(input, context)).toThrow();
+  });
+  it('normalizes lower-is-better axes and rejects stale band metrics', () => {
+    const { input, context } = setup(); input.policy.minimumQuality = 0;
+    context.profiles = { coding: [{ ...context.profiles.coding![0]!, higherIsBetter: false }] };
+    context.poolCriteria = { benchmarks: [{ ...context.profiles.coding![0]!, minimumNormalizedScore: .3 }], latencyMs: { max: 1000 } };
+    const result = selectCandidates(input, context)[0]!;
+    expect(result.benchmarkAxes[0]!.normalizedScore).toBeCloseTo(.2);
+    expect(result.eligible).toBe(false);
+    context.metrics = { a: { ...context.metrics.a!, observedAt: '2020-01-01T00:00:00Z' } };
+    expect(selectCandidates(input, context)[0]!.reasons).toContain('Outside source latency band');
+  });
+});

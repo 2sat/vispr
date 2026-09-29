@@ -40,3 +40,11 @@ The self-hosted developer endpoint is an external dependency. Build against the 
 - Catalog: Artificial Analysis connector and idempotent import pipeline against snapshots.
 - Routing: capability/coverage filtering and score decomposition, then Jev and continuity.
 - UI: scenario workspace and trace viewer against shared fixtures, then policy/provider/catalog screens.
+
+## Cache and batching handoff
+
+Workstream 3 now implements the batched Jev adapter, exact assessment cache, route orchestration, configurable frontier selection and simulated auction collection. See [routing implementation and handoff](routing-workstream.md) for interfaces and validation. Workstream 1 owns authenticated context, durable sessions, per-attempt ledger hooks, shared configuration and atomic award/dispatch; workstream 2 supplies fresh catalog/endpoint evidence and capability revisions; workstream 4 exposes settings and renders decision/attempt timing events. The current process-local cache does not promise cross-instance hits on Vercel.
+
+Source presets add an optional shared `source` request field, `SourceRoutingSchema`, and SDK `withSource` helper. Routing enforces the mapped pool on every path. Platform must persist app-owned mappings, forward the field, fingerprint it for idempotency and enforce the boundary at award time; UI owns the Sources/pool editor. See [source routing handoff](source-routing.md). Existing untagged requests are unchanged.
+
+Dynamic source presets use latency, task-capacity/cost and N inference-benchmark bands. Catalog owns benchmark normalization/version/freshness and endpoint estimates; routing owns per-axis gates and Pareto comparison; platform owns storing criteria and rechecking them at offer/award; UI owns per-band controls and benchmark rows. Candidate contracts now optionally include benchmark axes for traces, preserving compatibility with existing fixtures.

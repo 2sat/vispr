@@ -1,4 +1,4 @@
-import { AssessmentSchema, CatalogSnapshotSchema, InferenceRequestSchema, PolicySchema, type Assessment, type Candidate, type CatalogSnapshot, type InferenceRequest, type Policy } from '@vispr/contracts';
+import { PoolCriteriaSchema, type PoolCriteria, type BenchmarkAxis, AssessmentSchema, CatalogSnapshotSchema, InferenceRequestSchema, PolicySchema, type Assessment, type Candidate, type CatalogSnapshot, type InferenceRequest, type Policy } from '@vispr/contracts';
 import type { PoolSelector } from './index';
 
 export interface BenchmarkRule {
@@ -8,8 +8,9 @@ export interface BenchmarkRule {
   minimum: number;
   maximum: number;
   higherIsBetter: boolean;
-  required?: boolean;
-  minimumNormalizedScore?: number;
+  required?: boolean | undefined;
+  minimumNormalizedScore?: number | undefined;
+  maximumNormalizedScore?: number | undefined;
 }
 export interface EndpointMetrics {
   inputMicrosPerMillionTokens: number;
@@ -26,9 +27,16 @@ export interface SelectionContext {
   maximumEvidenceAgeMs: number;
   maximumMetricsAgeMs: number;
   remainingRequestBudgetMicros: number;
+  poolCriteria?: PoolCriteria;
+  fallbackTask?: Assessment['task'];
+  selection?: { paretoOnly?: boolean; scoreBand?: number };
 }
 export interface ScoreBreakdown { quality: number; cost: number; latency: number; uncertaintyPenalty: number; total: number }
-export interface ScoredCandidate extends Candidate { score: ScoreBreakdown | null }
+export type { BenchmarkAxis } from '@vispr/contracts';
+export interface ScoredCandidate extends Candidate { score: ScoreBreakdown | null; benchmarkAxes: BenchmarkAxis[] }
+export function withinBand(value: number | null, band: { min?: number | undefined; max?: number | undefined } | undefined): boolean {
+  return !band || (value !== null && Number.isFinite(value) && (band.min === undefined || value >= band.min) && (band.max === undefined || value <= band.max));
+}
 
 const clamp = (n: number) => Math.max(0, Math.min(1, n));
 const unsignedInteger = (n: number) => Number.isSafeInteger(n) && n >= 0;
@@ -55,31 +63,52 @@ export function scoreUtilities(policy: Policy, quality: number, costMicros: numb
 }
 function validateContext(context: SelectionContext) {
   if (!unsignedInteger(context.remainingRequestBudgetMicros) || !Number.isFinite(context.now) || !Number.isFinite(context.maximumEvidenceAgeMs) || context.maximumEvidenceAgeMs < 0 || !Number.isFinite(context.maximumMetricsAgeMs) || context.maximumMetricsAgeMs < 0) throw new Error('Invalid selection context');
+  if (context.selection?.scoreBand !== undefined && (!Number.isFinite(context.selection.scoreBand) || context.selection.scoreBand < 0 || context.selection.scoreBand > 2)) throw new Error('Invalid score band');
   for (const rules of Object.values(context.profiles)) {
     if (!Number.isFinite(rules.reduce((sum, rule) => sum + rule.weight, 0))) throw new Error('Benchmark weights overflow');
     const seen = new Set<string>();
     for (const rule of rules) {
       if (!Number.isFinite(rule.weight) || rule.weight <= 0 || !Number.isFinite(rule.minimum) || !Number.isFinite(rule.maximum) || rule.minimum >= rule.maximum || !Number.isFinite(rule.maximum - rule.minimum) || (rule.minimumNormalizedScore !== undefined && (!Number.isFinite(rule.minimumNormalizedScore) || rule.minimumNormalizedScore < 0 || rule.minimumNormalizedScore > 1))) throw new Error('Invalid benchmark profile');
+      if (rule.maximumNormalizedScore !== undefined && (!Number.isFinite(rule.maximumNormalizedScore) || rule.maximumNormalizedScore < 0 || rule.maximumNormalizedScore > 1 || (rule.minimumNormalizedScore !== undefined && rule.minimumNormalizedScore > rule.maximumNormalizedScore))) throw new Error('Invalid benchmark band');
       const key = JSON.stringify([rule.benchmark, rule.version]);
       if (seen.has(key)) throw new Error('Duplicate benchmark profile rule');
       seen.add(key);
     }
   }
 }
-export function selectCandidates(input: { request: InferenceRequest; policy: Policy; assessment: Assessment; catalog: CatalogSnapshot }, context: SelectionContext): ScoredCandidate[] {
+export function selectCandidates(input: { request: InferenceRequest; policy: Policy; assessment: Assessment | null; catalog: CatalogSnapshot }, context: SelectionContext): ScoredCandidate[] {
   const request = InferenceRequestSchema.parse(input.request);
   const policy = PolicySchema.parse(input.policy);
-  const assessment = AssessmentSchema.parse(input.assessment);
+  const assessment = input.assessment === null ? null : AssessmentSchema.parse(input.assessment);
   const catalog = CatalogSnapshotSchema.parse(input.catalog);
   validateContext(context);
   if (request.policyId !== policy.id) throw new Error('Request policy does not match supplied policy');
   if (new Set(catalog.deployments.map(d => d.id)).size !== catalog.deployments.length) throw new Error('Duplicate deployment IDs');
-  const profile = context.profiles[assessment.task] ?? [];
+  const task = assessment?.task ?? context.fallbackTask;
+  if (!task) throw new Error('An explicit conservative task profile is required without an assessment');
+  const criteria = context.poolCriteria ? PoolCriteriaSchema.parse(context.poolCriteria) : undefined;
+  const profile = [...(context.profiles[task] ?? [])];
+  for (const axis of criteria?.benchmarks ?? []) {
+    const index = profile.findIndex(rule => rule.benchmark === axis.benchmark && rule.version === axis.version);
+    const existing = profile[index];
+    if (existing) {
+      if (existing.minimum !== axis.minimum || existing.maximum !== axis.maximum || existing.higherIsBetter !== axis.higherIsBetter) throw new Error('Conflicting benchmark normalization');
+      const minimumNormalizedScore = Math.max(existing.minimumNormalizedScore ?? 0, axis.minimumNormalizedScore ?? 0);
+      const maximumNormalizedScore = Math.min(existing.maximumNormalizedScore ?? 1, axis.maximumNormalizedScore ?? 1);
+      if (minimumNormalizedScore > maximumNormalizedScore) throw new Error('Conflicting benchmark bands');
+      profile[index] = { ...existing, required: true, minimumNormalizedScore, maximumNormalizedScore };
+    } else profile.push({ ...axis, required: true });
+  }
+  validateContext({ ...context, profiles: { [task]: profile } });
   const hasImages = request.messages.some(m => m.role === 'user' && Array.isArray(m.content) && m.content.some(part => part.type === 'image_url'));
   const needsTools = Boolean(request.tools?.length) || request.messages.some(m => m.role === 'tool' || (m.role === 'assistant' && m.toolCalls?.length));
   const candidates = catalog.deployments.map((deployment): ScoredCandidate => {
     const reasons: string[] = [];
     const capabilities = deployment.capabilities;
+    if (!withinBand(capabilities.contextTokens, criteria?.contextTokens)) reasons.push('Outside source context-capacity band');
+    if (!withinBand(capabilities.maxOutputTokens, criteria?.maxOutputTokens)) reasons.push('Outside source output-capacity band');
+    for (const capability of criteria?.requiredCapabilities ?? []) if (!capabilities[capability]) reasons.push(`Source capability unsupported: ${capability}`);
+    const benchmarkAxes: BenchmarkAxis[] = [];
     if (deployment.status !== 'active') reasons.push('Deployment is not active');
     if (!capabilities.streaming) reasons.push('Streaming is unsupported');
     if (hasImages && !capabilities.vision) reasons.push('Image input is unsupported');
@@ -104,15 +133,19 @@ export function selectCandidates(input: { request: InferenceRequest; policy: Pol
       const proxy = observation?.evidence === 'proxy';
       if (!observation || proxy) {
         uncertainWeight += rule.weight;
-        if (rule.required || rule.minimumNormalizedScore !== undefined) reasons.push(`Required measured evidence missing: ${rule.benchmark}`);
+        if (rule.required || rule.minimumNormalizedScore !== undefined || rule.maximumNormalizedScore !== undefined) reasons.push(`Required measured evidence missing: ${rule.benchmark}`);
         else if (!policy.allowIncompleteCoverage) reasons.push(`Incomplete benchmark coverage: ${rule.benchmark}`);
       }
+      let normalizedScore: number | null = null;
       if (observation) {
         const normalized = (observation.value - rule.minimum) / (rule.maximum - rule.minimum);
         const score = rule.higherIsBetter ? normalized : 1 - normalized;
+        normalizedScore = score;
+        if (rule.maximumNormalizedScore !== undefined && score > rule.maximumNormalizedScore) reasons.push(`Benchmark maximum exceeded: ${rule.benchmark}`);
         if (rule.minimumNormalizedScore !== undefined && score < rule.minimumNormalizedScore) reasons.push(`Benchmark minimum not met: ${rule.benchmark}`);
         weighted += score * (rule.weight / totalWeight); coveredWeight += rule.weight;
       }
+      benchmarkAxes.push({ benchmark: rule.benchmark, version: rule.version, normalizedScore, evidence: observation?.evidence ?? 'missing', sourceUrl: observation?.sourceUrl ?? null, retrievedAt: observation?.retrievedAt ?? null });
     }
     const quality = coveredWeight ? clamp(weighted / (coveredWeight / totalWeight)) : null;
     if (quality === null) reasons.push('Quality cannot be established from available evidence');
@@ -131,9 +164,31 @@ export function selectCandidates(input: { request: InferenceRequest; policy: Pol
       }
       if (estimatedCostMicros !== null && estimatedCostMicros > Math.min(policy.requestBudgetMicros, context.remainingRequestBudgetMicros)) reasons.push('Remaining request budget exceeded');
     }
+    if (!withinBand(estimatedLatencyMs, criteria?.latencyMs)) reasons.push('Outside source latency band');
+    if (!withinBand(estimatedCostMicros, criteria?.estimatedCostMicros)) reasons.push('Outside source inference-cost band');
     const score = quality !== null && estimatedCostMicros !== null && estimatedLatencyMs !== null ? scoreUtilities(policy, quality, estimatedCostMicros, estimatedLatencyMs, totalWeight ? uncertainWeight / totalWeight : 1) : null;
-    return { deploymentId: deployment.id, eligible: reasons.length === 0, reasons, quality, estimatedCostMicros, estimatedLatencyMs, score };
+    return { deploymentId: deployment.id, eligible: reasons.length === 0, reasons, quality, estimatedCostMicros, estimatedLatencyMs, score, benchmarkAxes };
   });
+  if (context.selection?.paretoOnly) {
+    const eligible = candidates.filter(c => c.eligible);
+    for (const candidate of eligible) {
+      const dominates = eligible.some(other => {
+        if (other === candidate) return false;
+        // Unknown or proxy coordinates cannot prove benchmark dominance.
+        if (candidate.benchmarkAxes.some((axis, i) => axis.evidence !== 'measured' || other.benchmarkAxes[i]?.evidence !== 'measured')) return false;
+        const left = other.benchmarkAxes.map(axis => axis.normalizedScore!);
+        const right = candidate.benchmarkAxes.map(axis => axis.normalizedScore!);
+        left.push(-other.estimatedCostMicros!, -other.estimatedLatencyMs!, -other.score!.uncertaintyPenalty);
+        right.push(-candidate.estimatedCostMicros!, -candidate.estimatedLatencyMs!, -candidate.score!.uncertaintyPenalty);
+        return left.every((value, i) => value >= right[i]!) && left.some((value, i) => value > right[i]!);
+      });
+      if (dominates) { candidate.eligible = false; candidate.reasons.push('Dominated on benchmark axes, cost, latency and uncertainty'); }
+    }
+  }
+  if (context.selection?.scoreBand !== undefined) {
+    const best = Math.max(...candidates.filter(c => c.eligible).map(c => c.score!.total));
+    for (const candidate of candidates) if (candidate.eligible && best - candidate.score!.total > context.selection.scoreBand) { candidate.eligible = false; candidate.reasons.push('Outside configured score band'); }
+  }
   const ranked = candidates.filter(c => c.eligible).sort((a, b) => b.score!.total - a.score!.total || a.estimatedLatencyMs! - b.estimatedLatencyMs! || (a.deploymentId < b.deploymentId ? -1 : a.deploymentId > b.deploymentId ? 1 : 0));
   for (const candidate of ranked.slice(policy.maxCandidates)) { candidate.eligible = false; candidate.reasons.push('Outside configured candidate pool size'); }
   // Preserve every excluded deployment for the trace. Scoring uses fixed policy

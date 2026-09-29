@@ -1,6 +1,6 @@
 # Batched classification and exact assessment caching
 
-Status: accepted design for task 3. Hosted Jev remains the initial classifier. These changes reduce repeated calls without changing public-benchmark-only model selection or the application's hard constraints.
+Status: implemented in task-3 routing libraries; live platform/UI integration remains pending. See [implementation and handoff](routing-workstream.md). Hosted Jev remains the initial classifier. These changes reduce repeated calls without changing public-benchmark-only model selection or the application's hard constraints.
 
 ## Single batched request
 
@@ -32,7 +32,7 @@ Exclude the per-request idempotency key so identical independent requests can hi
 
 Policy, catalog and price changes do not authorize reuse of a previously selected pool. If a future classification question consumes a policy/catalog field, that field's version must enter the key. Keep confidence gates outside the cached answer so current thresholds apply. Conservative fallback decisions are recalculated each time, not cached as if Jev produced them.
 
-Proposed initial limits: five-minute TTL, 256 local entries, explicit cache-off setting. Treat these as tunable implementation defaults. Do not extend TTL on reads. Keep payloads out of values and logs; cache only the digest plus typed assessment and timing/version metadata. Cache use and retention must respect the application's data-handling policy. Do not share across applications.
+Implemented default limits: five-minute TTL, 256 local entries, explicit cache-off setting. Treat these as tunable implementation defaults. Do not extend TTL on reads. Keep payloads out of values and logs; cache only the digest plus typed assessment and timing/version metadata. Cache use and retention must respect the application's data-handling policy. Do not share across applications.
 
 On a hit, revalidate current capabilities, quality evidence/freshness, endpoint availability, token/context limits, cost/latency constraints and remaining spend. Obtain a valid offer/reservation before execution. Expired bids can never become executable through a cache hit. Cache expiry must not be treated as model failure.
 
