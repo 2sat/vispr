@@ -5,14 +5,14 @@ import { useEffect, useRef, useState } from 'react';
 
 const manageLinks = [
   { id: 'applications', href: '/applications', title: 'Applications & policies', desc: 'API keys, saved policies, limits, fallbacks' },
-  { id: 'providers', href: '/providers', title: 'Provider console', desc: 'Endpoints, offerings, bid strategy, capacity' },
+  { id: 'providers-console', href: '/providers/console', title: 'Provider console', desc: 'Endpoints, offerings, bid strategy, capacity' },
   { id: 'catalog', href: '/catalog', title: 'Model catalog', desc: 'Benchmarks, pricing, sources, refresh history' },
 ];
 
 interface AppHeaderProps {
-  active: 'playground' | 'trace' | 'applications' | 'providers' | 'catalog';
+  active: 'playground' | 'trace' | 'applications' | 'providers' | 'providers-console' | 'catalog';
   traceHref: string;
-  role: 'Builder' | 'Operator';
+  role: 'Builder' | 'Operator' | 'Provider';
 }
 
 export function AppHeader({ active, traceHref, role }: AppHeaderProps) {
@@ -27,6 +27,7 @@ export function AppHeader({ active, traceHref, role }: AppHeaderProps) {
           Request trace
         </Link>
         <ManageMenu active={active} />
+        {active === 'providers' && <Link href="/providers" className="nav-link" aria-current="page">Providers</Link>}
       </nav>
       <span className="app-header__role">{role}</span>
     </header>
