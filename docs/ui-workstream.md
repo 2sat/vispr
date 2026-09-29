@@ -4,13 +4,14 @@ Branch: `work/ui`. Scope: `apps/web` presentation, UI fixtures and the server se
 
 ## Implemented
 
-Three screens, composed from `components/` and fed by `lib/`:
+Screens composed from `components/` and fed by `lib/`:
 
+- **Model explorer** (`/explorer`) — interactive axis projection, latency/cost ceilings, independent benchmark floors, token-based cost estimates, sortable per-axis table, frontier/exclusion explanations, and illustrative criteria copying. Sourced discovery is separate from the fictional instructional dataset.
 - **Playground** (`/playground`) — scenario list, editable request draft, policy preset selector and a Run button. Submits through a server action; renders the winning model, response, usage and cost on return.
-- **Provider console** (`/providers`, operator role) — registered deployments with availability, connection status and bid strategy. `lib/bidding.ts` holds `quoteBid`, so the console preview and the simulated bidding adapters agree on what an offering would quote; floors always win. `force-dynamic`, since operator data changes per request.
+- **Provider console** (`/providers/console`, operator role) — registered deployments with availability, connection status and bid strategy. `lib/bidding.ts` holds `quoteBid`, so the console preview and the simulated bidding adapters agree on what an offering would quote; floors always win. `force-dynamic`, since operator data changes per request.
 - **Request trace** (`/runs/[runId]`) — the routing decision for one run: ordered routing steps, a plain-language "why this model won" summary, then progressive disclosure for score breakdown, excluded models, bids, timing/cost and the run record.
 
-Presentation notes: `Disclosure` keeps the trace's detail collapsed by default, so the default view stays at the level of the decision rather than the mechanism. `AppHeader` carries the primary nav plus a Manage menu that marks the active section; `/providers` is live, while `/applications` and `/catalog` are still dead links. Fonts and design tokens live in `app/vispr.css`.
+Presentation notes: `Disclosure` keeps trace detail collapsed by default. `AppHeader` includes Model explorer and a Manage menu with the live provider console at `/providers/console`. Applications and Catalog remain disabled until their pages exist. Fonts and design tokens live in `app/vispr.css`.
 
 There is no `/` route yet; enter at `/playground`.
 
@@ -36,6 +37,17 @@ Pending: live streaming, policy persistence, auth, catalog/provider management s
 pnpm check
 ```
 
-`apps/web` currently has no tests of its own, so it has no `test` script and no `vitest.config.mts`; the root suite globs `packages/**` only. Re-add both alongside the first component test. Test coverage for these screens is the main gap in this slice.
+The root `pnpm test` suite now includes the web tests, including six explorer calculation tests: multidimensional dominance, benchmark selection, cost/context changes, missing evidence, inclusive limits and stable sorting. The same suite covers platform and package tests. Component-level automation for Playground/Request Trace remains a gap.
 
 Because the shared `tsconfig.base.json` sets `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`, fixture lookups need explicit narrowing — see the guards in `Playground` and the sort fallback in `explainWinner`.
+
+
+## Explorer design and integration
+
+The explorer uses the existing typography, header and design tokens. Controls define hard bands on the left; the main area shows population counts, a selectable two-dimensional projection, all enabled benchmark columns and reasons for the selected model. Context can be plotted as a capability dimension but is not part of the performance frontier. Sorting a table column or changing the projection cannot silently change the N-dimensional decision. No blended quality score is used in this explorer.
+
+The illustrative dataset contains fictional endpoint names with synthetic scores and is labeled throughout. Discovery mode reads the committed OpenRouter snapshot server-side and sends only display data to the client; it never forwards credentials. Price is an advertised base-rate estimate for the chosen token shape, not a billable quote. Public benchmark aggregates without reviewed versions and public latency that is not verified full-completion time stay unknown. Unknown required coordinates prevent frontier membership.
+
+This is an exploration design, not the live router: it does not implement budget accounting, reservations, source mapping persistence, weighted ranking, pool-size caps, evidence freshness or auction awards. Copying emits an illustrative `PoolCriteria` shape with deliberately illustrative benchmark IDs. Before connecting live routing, replace the fixed instructional axes with catalog-defined versioned axes/ranges/directions and consume the router's actual candidate explanations. Add saved source presets through the authenticated configuration API.
+
+Explorer validation includes six calculation tests, workspace typechecks and the production build. Browser checks cover threshold exclusions, sourced-mode unknown evidence and SVG hydration. Explorer styling stacks controls on narrow screens and keeps the wide axis table horizontally scrollable.

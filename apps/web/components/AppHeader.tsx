@@ -10,7 +10,7 @@ const manageLinks = [
 ];
 
 interface AppHeaderProps {
-  active: 'playground' | 'trace' | 'applications' | 'providers' | 'providers-console' | 'catalog';
+  active: 'playground' | 'trace' | 'applications' | 'providers' | 'providers-console' | 'catalog' | 'explorer';
   traceHref: string;
   role: 'Builder' | 'Operator' | 'Provider';
 }
@@ -26,6 +26,7 @@ export function AppHeader({ active, traceHref, role }: AppHeaderProps) {
         <Link href={traceHref} className="nav-link" aria-current={active === 'trace' ? 'page' : undefined}>
           Request trace
         </Link>
+        <Link href="/explorer" className="nav-link" aria-current={active === 'explorer' ? 'page' : undefined}>Model explorer</Link>
         <ManageMenu active={active} />
         {active === 'providers' && <Link href="/providers" className="nav-link" aria-current="page">Providers</Link>}
       </nav>
@@ -68,7 +69,13 @@ function ManageMenu({ active }: { active: AppHeaderProps['active'] }) {
       </button>
       {open && (
         <div className="menu__panel">
-          {manageLinks.map((l) => (
+          {manageLinks.map((l) => l.id !== 'providers-console' ? (
+            <div key={l.href} className="menu__item menu__item--unavailable" aria-disabled="true">
+              <span className="menu__title">{l.title}</span>
+              <span className="menu__desc">{l.desc}</span>
+              <span className="menu__availability">Not yet available</span>
+            </div>
+          ) : (
             <Link
               key={l.href}
               href={l.href}
