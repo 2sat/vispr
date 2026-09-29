@@ -17,7 +17,7 @@ Supabase: https://supabase.com/dashboard/project/xcqpiusinmfuicwmizqz
 Region: us-west-1.
 
 Vercel builds the root npm workspace and serves apps/web/.next. Run `vercel deploy` for a preview and `vercel deploy --prod` for production. The initial deployment is protected by Vercel authentication.
-GitHub automatic deployments require write/admin access to 2sat/vispr in Vercel's GitHub integration; initial connection failed. Reconnect with `vercel git connect` once access is granted.
+GitHub CLI access is configured for jackguillet with write access. Automatic deployments still require the Vercel GitHub app to have access to 2sat/vispr; connection failed even after CLI access was corrected. An organization owner may need to enable repository access. Reconnect with `vercel git connect` after approval.
 
 Apply reviewed hosted migrations with `npx supabase db push`. The hosted project is linked locally. Generated credentials are in ignored files with restricted permissions; do not commit them.
 
