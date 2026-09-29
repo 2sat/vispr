@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { DEMO_MODEL, generateDemoResponse, presenterAuthorized, readDemoData, sealDemoData } from './openai-demo';
+import { DEMO_MODEL, generateDemoResponse, readDemoData, sealDemoData } from './openai-demo';
 
 const jar = vi.hoisted(() => new Map<string, string>());
 vi.mock('next/headers', () => ({ cookies: async () => ({
@@ -8,14 +8,14 @@ vi.mock('next/headers', () => ({ cookies: async () => ({
 }) }));
 import { getRunTrace, runScenario } from './vispr-server';
 
-const secret = 'presenter-fixture-123456';
+const secret = 'sk-fixture-only';
 const request = { scenarioId: 'code-debugging' as const, policyId: 'quality-first', prompt: 'Fix the duration conversion.' };
 const generated = {
   id: 'resp_fixture', model: DEMO_MODEL, status: 'completed',
   output: [{ type: 'message', content: [{ type: 'output_text', text: 'Use 3600 seconds per hour.' }] }],
   usage: { input_tokens: 100, output_tokens: 20, input_tokens_details: { cached_tokens: 40 } },
 };
-beforeEach(() => { jar.clear(); vi.stubEnv('VISPR_DEMO_FIXTURES', '1'); vi.stubEnv('VISPR_DEMO_ACCESS_CODE', secret); vi.stubEnv('OPENAI_API_KEY', 'sk-fixture-only'); });
+beforeEach(() => { jar.clear(); vi.stubEnv('VISPR_DEMO_FIXTURES', '1'); vi.stubEnv('OPENAI_API_KEY', 'sk-fixture-only'); });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 it('changes the prepared winner with the policy and preserves it in the trace', async () => {
@@ -31,17 +31,18 @@ it('changes the prepared winner with the policy and preserves it in the trace', 
   expect(await getRunTrace(cheap.run.runId, 'unknown-policy')).toBeNull();
 });
 
-it('does not dispatch a paid request without the presenter code', async () => {
-  const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+it('generates an OpenAI response without a presenter code', async () => {
+  vi.stubEnv('VISPR_DEMO_ACCESS_CODE', '');
+  const fetcher = vi.fn(async () => Response.json(generated));
+  vi.stubGlobal('fetch', fetcher);
   const result = await runScenario({ ...request, live: true });
-  expect(result).toMatchObject({ ok: false }); expect(fetcher).not.toHaveBeenCalled();
+  expect(result.ok).toBe(true);
+  expect(fetcher).toHaveBeenCalledOnce();
 });
 
-it('rejects forged or expired presenter sessions', () => {
-  const token = sealDemoData({ presenter: true, expires: Date.now() + 10000 }, secret);
-  expect(presenterAuthorized(undefined, token, secret)).toBe(true);
-  expect(presenterAuthorized(undefined, token, 'different-presenter-secret')).toBe(false);
-  expect(presenterAuthorized(undefined, sealDemoData({ presenter: true, expires: 0 }, secret), secret)).toBe(false);
+it('rejects forged trace metadata', () => {
+  const token = sealDemoData({ expires: Date.now() + 10000 }, secret);
+  expect(readDemoData(token, 'different-secret')).toBeNull();
   expect(readDemoData(token + '.forged', secret)).toBeNull();
 });
 
@@ -57,7 +58,7 @@ it('bounds paid generation, uses sample context, and reports actual usage separa
 
 it('retains signed trace metadata without storing prompt or response', async () => {
   vi.stubGlobal('fetch', async () => Response.json(generated));
-  const result = await runScenario({ ...request, live: true, presenterCode: secret });
+  const result = await runScenario({ ...request, live: true });
   expect(result.ok).toBe(true); if (!result.ok) return;
   expect(result.run.output).toBe('Use 3600 seconds per hour.');
   expect(result.run.illustrative).toBe(true);
@@ -77,7 +78,7 @@ it('rejects oversized prompts before calling OpenAI', async () => {
 
 it('never returns provider error payloads or silently substitutes canned output', async () => {
   vi.stubGlobal('fetch', async () => Response.json({ error: 'sensitive provider detail' }, { status: 429 }));
-  const result = await runScenario({ ...request, live: true, presenterCode: secret });
+  const result = await runScenario({ ...request, live: true });
   expect(result).toMatchObject({ ok: false }); expect(JSON.stringify(result)).not.toContain('sensitive provider detail');
 });
 

@@ -34,7 +34,7 @@ between the result card and **Why this model?**. Policy editing is not available
    as illustrative configuration. Close: “One interface, policy-driven selection,
    and a decision you can inspect.”
 
-If OpenAI presenter credentials are configured, switch to **OpenAI response**
+If OpenAI credentials are configured, switch to **OpenAI response**
 for an edited prompt. Explain that only response generation is real: the auction
 winner, assessment and routing timings remain simulated, and the actual response
 model is listed separately. Rehearse this mode before the presentation.
@@ -51,18 +51,16 @@ Set these server-only variables in Vercel before deploying:
 
 - `VISPR_DEMO_FIXTURES=1`
 - `OPENAI_API_KEY`: a project key with Responses API access and available quota.
-- `VISPR_DEMO_ACCESS_CODE`: a private presenter code of at least 12 characters.
 
-Open the playground, choose **OpenAI response**, enter the presenter code, then
-Run. The code unlocks generation in that browser for one hour. API keys never
-reach the browser. The public prepared mode requires no code or paid requests.
+Open the playground, choose **OpenAI response**, then Run. No presenter code is
+required. API keys never reach the browser. Prepared mode uses no paid requests.
 
 OpenAI calls use pinned `gpt-4.1-mini-2025-04-14`, at most 8,000 prompt characters,
 1,800 output tokens, a 45-second timeout, `store: false`, and no automatic retries.
 Usage and elapsed generation time are reported from the actual call. Estimated
 cost uses published input/cached-input/output rates and is separate from the
 provider bill. This demo path bypasses the marketplace ledger; it does not claim
-to enforce the marketplace's daily budget. Keep the presenter code private.
+to enforce the marketplace's daily budget.
 
 Only signed run metadata is retained in per-browser HttpOnly cookies for an hour.
 The prompt and output are not retained by the demo app. A new run of the same

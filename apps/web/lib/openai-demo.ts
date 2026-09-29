@@ -29,16 +29,6 @@ export function readDemoData<T>(token: string | undefined, secret: string): T | 
   catch { return null; }
 }
 
-export function presenterAuthorized(code: string | undefined, session: string | undefined, secret: string): boolean {
-  if (secret.length < 12) return false;
-  const saved = readDemoData<{ expires: number; presenter: boolean }>(session, secret);
-  if (saved?.presenter === true && saved.expires > Date.now()) return true;
-  if (typeof code !== 'string' || !code || code.length > 256) return false;
-  const supplied = Buffer.from(code);
-  const expected = Buffer.from(secret);
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
-}
-
 export async function generateDemoResponse(req: RunRequest, fetcher = fetch): Promise<{
   output: string; generation: NonNullable<RunSummary['generation']>;
 }> {

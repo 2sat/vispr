@@ -11,7 +11,7 @@ import type {
 } from './types';
 import { cookies } from 'next/headers';
 import { randomUUID } from 'node:crypto';
-import { generateDemoResponse, presenterAuthorized, readDemoData, sealDemoData } from './openai-demo';
+import { generateDemoResponse, readDemoData, sealDemoData } from './openai-demo';
 import { rankBids } from './format';
 
 const useFixtures = () => process.env.VISPR_DEMO_FIXTURES === '1';
@@ -23,11 +23,8 @@ export async function runScenario(req: RunRequest): Promise<RunResult> {
   if (useFixtures()) {
     const run = fixtureRun(req.scenarioId, req.policyId);
     if (!req.live) return { ok: true, run: illustrativeTrace(run).run };
-    const secret = process.env.VISPR_DEMO_ACCESS_CODE ?? '';
+    const secret = process.env.OPENAI_API_KEY ?? '';
     const jar = await cookies();
-    if (!presenterAuthorized(req.presenterCode, jar.get('vispr-demo-presenter')?.value, secret)) {
-      return { ok: false, error: 'Enter the presenter code to enable OpenAI responses.' };
-    }
     try {
       const result = await generateDemoResponse(req);
       run.runId = `openai-${randomUUID()}`;
@@ -37,7 +34,6 @@ export async function runScenario(req: RunRequest): Promise<RunResult> {
       const trace = illustrativeTrace(run);
       run.winner = trace.run.winner;
       const options = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' as const, path: '/', maxAge: 3600 };
-      jar.set('vispr-demo-presenter', sealDemoData({ presenter: true, expires: Date.now() + 3600000 }, secret), options);
       // Keep only per-browser trace metadata, never the prompt/response or API key.
       jar.set(`vispr-demo-${req.scenarioId}`, sealDemoData({ run: { ...run, output: '' }, expires: Date.now() + 3600000 }, secret), options);
       return { ok: true, run };
@@ -68,7 +64,7 @@ export async function getRunTrace(runId: string, policyId?: string): Promise<Tra
     }
     if (!/^openai-[0-9a-f-]{36}$/.test(runId)) return null;
     const jar = await cookies();
-    const secret = process.env.VISPR_DEMO_ACCESS_CODE ?? '';
+    const secret = process.env.OPENAI_API_KEY ?? '';
     for (const item of scenarios) {
       const data = readDemoData<{ run: RunSummary; expires: number }>(jar.get(`vispr-demo-${item.id}`)?.value, secret);
       if (data?.run.runId === runId && data.expires > Date.now()) return illustrativeTrace(data.run);
