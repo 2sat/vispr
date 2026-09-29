@@ -34,7 +34,7 @@ The first path requires an operator-created `execution_offerings` row keyed by a
 - `secret_reference`: `OPENROUTER_API_KEY` for hosted execution, or the operator's direct environment reference.
 - Integer input/output micro-USD per million tokens upper rates and `bounded=true` **only after** confirming the output cap and all separately billed reasoning/cache/extra charges fit the bound. Unknown bounds must remain disabled.
 
-The bound reserves the full deployment context at its input rate plus maximum requested output at its output rate. The first strict path accepts text and tool/schema requests, using UTF-8 bytes plus message overhead as a conservative context gate. It rejects image inputs and sessions until their spend and continuity integration exists. If the conservative reserve exceeds the request ceiling, select a cheaper/smaller certified offering; do not lower the reservation to simulated auction prices.
+The bound reserves the full deployment context at its input rate plus maximum requested output at its output rate. The first strict path accepts text and tool/schema requests, using UTF-8 bytes plus message overhead as a conservative context gate. It rejects image inputs, sessions, and source pool labels until their spend/continuity/routing integration exists. The SDK preserves the routing stream’s `withSource` helper; the early service fails explicitly rather than ignoring a source restriction. If the conservative reserve exceeds the request ceiling, select a cheaper/smaller certified offering; do not lower the reservation to simulated auction prices.
 
 ```ts
 const vispr = new Vispr({ apiKey: process.env.VISPR_API_KEY!, baseURL: 'https://your-vispr-service.example' });

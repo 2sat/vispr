@@ -68,6 +68,8 @@ Local development runs the same services against a local database. Vercel does n
 
 Jev receives the inference request context needed for classification and focused typed questions: task family, complexity, and semantic requirements. Explicit API features such as tool schemas, image inputs, requested output format, and context size are extracted in code. Jev confidence informs configurable fallback behavior.
 
+Batch independent task, complexity, and continuity questions into one Jev request. Use a tenant-scoped exact assessment cache keyed by relevant request/session context and classifier/question revisions. Cache only validated semantic assessments; rebuild the pool and recheck budgets, capabilities, current metrics, availability and bid validity on every request. See [classification design](classification-design.md) for TTL, key construction and acceptance cases.
+
 Use independent Choice/Score/Noul questions as appropriate. Pin the Jev model version and question schema. Jev does not perform pricing arithmetic or invent model benchmark scores. TypeSafe recommends narrow judgments composed in code and documents numerical limitations.[1][2]
 
 Selection proceeds as follows:
@@ -204,3 +206,11 @@ Implementation can proceed without further product input. A live deployed demo e
 3. [Artificial Analysis data API](https://artificialanalysis.ai/api-reference).
 4. [Vercel Cron management](https://vercel.com/docs/cron-jobs/manage-cron-jobs): secure the scheduled route and account for function duration limits.
 5. [AI SDK OpenAI-compatible providers](https://ai-sdk.dev/providers/openai-compatible-providers): adapter foundation for compatible endpoints.
+
+## Invocation source presets
+
+Implemented in the contracts/SDK/routing libraries: optional source tags map to app-owned named model pools, with exact-match validation and hard pool boundaries across cache hits, continuity and conservative fallback. Jev still classifies within the boundary; all hard constraints apply. See [source routing](source-routing.md) for configuration, SDK examples, validation and the platform/UI handoff. Durable configuration, HTTP transport and a Sources settings editor remain integration work.
+
+### Dynamic pool dimensions
+
+Source presets now accept inclusive latency and task-capacity/cost bands plus N independent inference-benchmark score bands. Model/deployment lists are optional restrictions. Each benchmark remains a coordinate in the Pareto sort space, with version, direction, evidence and freshness; the weighted quality summary is only an additional application preference/gate, not a replacement for these axes. Dynamic membership and hard bands are rechecked after semantic cache reuse and against final offers. See [source routing](source-routing.md) for schema/examples and the GUI handoff.

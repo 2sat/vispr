@@ -3,7 +3,7 @@ import { Database, hashApiKey } from "@vispr/db";
 import { CompatibleAdapter } from "@vispr/providers";
 import {
   DeploymentSchema,
-  InferenceRequestSchema,
+  ExecutionRequestSchema,
   PolicySchema,
   TraceEventSchema,
   type TraceEvent,
@@ -79,8 +79,9 @@ export async function ownedRequest(db: Database, appId: string, id: string) {
 }
 export async function prepare(req: Request, raw: unknown, db = database()) {
   const app = await authenticate(req, db);
-  const request = InferenceRequestSchema.parse(raw);
+  const request = ExecutionRequestSchema.parse(raw);
   // Until routing is integrated, sessions would falsely imply continuity.
+  if (request.source) throw new PlatformError("NOT_CONFIGURED", "Source pool routing is pending service integration", 503);
   if (request.sessionId)
     throw new PlatformError(
       "NOT_CONFIGURED",

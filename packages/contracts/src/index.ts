@@ -36,7 +36,7 @@ export const CatalogSnapshotSchema = z.strictObject({
 });
 export type CatalogSnapshot = z.infer<typeof CatalogSnapshotSchema>;
 
-const ToolCall = z.strictObject({ id, name: id, arguments: z.string().refine(value => { try { const parsed = JSON.parse(value); return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed); } catch { return false; } }, 'Tool arguments must be a JSON object') });
+const ToolCall = z.strictObject({ id, name: id, arguments: z.string() });
 const Content = z.array(z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('text'), text: z.string() }),
   z.strictObject({ type: z.literal('image_url'), url: z.url() }),
@@ -47,27 +47,63 @@ export const MessageSchema = z.discriminatedUnion('role', [
   z.strictObject({ role: z.literal('assistant'), content: z.string(), toolCalls: z.array(ToolCall).optional() }),
   z.strictObject({ role: z.literal('tool'), content: z.string(), toolCallId: id }),
 ]);
+// Stable app-builder labels; never derive routing authority from prompt text.
+export const InvocationSourceSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/);
+const band = z.strictObject({ min: z.number().finite().nonnegative().optional(), max: z.number().finite().nonnegative().optional() })
+  .refine(b => b.min !== undefined || b.max !== undefined, 'Band needs a bound')
+  .refine(b => b.min === undefined || b.max === undefined || b.min <= b.max, 'Band bounds are reversed');
+export const BenchmarkAxisRuleSchema = z.strictObject({
+  benchmark: id, version: id, weight: z.number().finite().positive().default(1),
+  minimum: z.number().finite(), maximum: z.number().finite(), higherIsBetter: z.boolean(),
+  required: z.boolean().optional(), minimumNormalizedScore: z.number().min(0).max(1).optional(),
+  maximumNormalizedScore: z.number().min(0).max(1).optional(),
+}).refine(r => r.minimum < r.maximum && Number.isFinite(r.maximum - r.minimum), 'Invalid normalization range')
+  .refine(r => r.minimumNormalizedScore === undefined || r.maximumNormalizedScore === undefined || r.minimumNormalizedScore <= r.maximumNormalizedScore, 'Benchmark bounds are reversed');
+export const PoolCriteriaSchema = z.strictObject({
+  latencyMs: band.optional(), estimatedCostMicros: band.optional(),
+  contextTokens: band.optional(), maxOutputTokens: band.optional(),
+  requiredCapabilities: z.array(z.enum(['tools', 'structuredOutput', 'vision', 'streaming'])).min(1).optional(),
+  benchmarks: z.array(BenchmarkAxisRuleSchema).min(1).optional(),
+}).refine(c => Object.values(c).some(v => v !== undefined), 'Criteria must contain a dimension')
+  .refine(c => !c.benchmarks || new Set(c.benchmarks.map(b => JSON.stringify([b.benchmark, b.version]))).size === c.benchmarks.length, 'Duplicate benchmark axes');
+export type PoolCriteria = z.infer<typeof PoolCriteriaSchema>;
+export const SourcePoolSchema = z.strictObject({ id, deploymentIds: z.array(id).min(1).optional(), criteria: PoolCriteriaSchema.optional() })
+  .refine(p => p.deploymentIds !== undefined || p.criteria !== undefined, 'Pool needs criteria or deployments');
+export const SourceRoutingSchema = z.strictObject({
+  pools: z.array(SourcePoolSchema),
+  bindings: z.array(z.strictObject({ source: InvocationSourceSchema, poolId: id })),
+}).superRefine((config, ctx) => {
+  const pools = new Set(config.pools.map(pool => pool.id));
+  if (pools.size !== config.pools.length) ctx.addIssue({ code: 'custom', message: 'Pool IDs must be unique' });
+  if (new Set(config.bindings.map(binding => binding.source)).size !== config.bindings.length) ctx.addIssue({ code: 'custom', message: 'Source bindings must be unique' });
+  if (config.bindings.some(binding => !pools.has(binding.poolId))) ctx.addIssue({ code: 'custom', message: 'Source binding references an unknown pool' });
+  if (config.pools.some(pool => pool.deploymentIds && new Set(pool.deploymentIds).size !== pool.deploymentIds.length)) ctx.addIssue({ code: 'custom', message: 'Pool deployments must be unique' });
+});
+export type SourceRouting = z.infer<typeof SourceRoutingSchema>;
 export const InferenceRequestSchema = z.strictObject({
-  policyId: id, sessionId: id.optional(), idempotencyKey: id,
+  policyId: id, sessionId: id.optional(), idempotencyKey: id, source: InvocationSourceSchema.optional(),
   messages: z.array(MessageSchema).min(1), maxOutputTokens: z.number().int().positive(),
   tools: z.array(z.strictObject({ name: id, description: z.string(), parameters: z.record(z.string(), z.unknown()) })).optional(),
   outputSchema: z.record(z.string(), z.unknown()).optional(),
   temperature: z.number().min(0).max(2).optional(),
   toolChoice: z.enum(['auto', 'none', 'required']).optional(),
-}).superRefine((request, ctx) => {
+});
+export type InferenceRequest = z.infer<typeof InferenceRequestSchema>;
+// Execution requires portable tool history; routing may separately use session metadata.
+export const ExecutionRequestSchema = InferenceRequestSchema.superRefine((request, ctx) => {
   const pending = new Set<string>();
   const names = request.tools?.map(t => t.name) ?? [];
   if (new Set(names).size !== names.length) ctx.addIssue({code:'custom',message:'Duplicate tool names'});
   if (request.toolChoice === 'required' && !names.length) ctx.addIssue({code:'custom',message:'Required tool choice needs tools'});
   for (const message of request.messages) {
     if (message.role === 'assistant') for (const call of message.toolCalls ?? []) {
+      try { const parsed = JSON.parse(call.arguments); if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(); } catch { ctx.addIssue({code:'custom',message:'Tool arguments must be a JSON object'}); }
       if (pending.has(call.id)) ctx.addIssue({code:'custom',message:'Duplicate tool call ID'});
       pending.add(call.id);
     }
     if (message.role === 'tool' && !pending.delete(message.toolCallId)) ctx.addIssue({code:'custom',message:'Tool result requires a preceding unresolved call'});
   }
 });
-export type InferenceRequest = z.infer<typeof InferenceRequestSchema>;
 export const AssessmentSchema = z.strictObject({
   task: z.enum(['support', 'extraction', 'coding', 'research', 'design', 'other']),
   complexity: z.enum(['low', 'medium', 'high']), confidence: z.number().min(0).max(1),
@@ -75,7 +111,12 @@ export const AssessmentSchema = z.strictObject({
   modelVersion: id, questionVersion: id,
 });
 export type Assessment = z.infer<typeof AssessmentSchema>;
-export const CandidateSchema = z.strictObject({ deploymentId: id, eligible: z.boolean(), reasons: z.array(z.string()), quality: z.number().min(0).max(1).nullable(), estimatedCostMicros: MoneyMicros.nullable(), estimatedLatencyMs: z.number().nonnegative().nullable() });
+export const BenchmarkAxisSchema = z.strictObject({
+  benchmark: id, version: id, normalizedScore: z.number().min(0).max(1).nullable(),
+  evidence: z.enum(['measured', 'proxy', 'missing']), sourceUrl: z.url().nullable(), retrievedAt: z.iso.datetime().nullable(),
+});
+export type BenchmarkAxis = z.infer<typeof BenchmarkAxisSchema>;
+export const CandidateSchema = z.strictObject({ deploymentId: id, eligible: z.boolean(), reasons: z.array(z.string()), quality: z.number().min(0).max(1).nullable(), estimatedCostMicros: MoneyMicros.nullable(), estimatedLatencyMs: z.number().nonnegative().nullable(), benchmarkAxes: z.array(BenchmarkAxisSchema).optional() });
 export type Candidate = z.infer<typeof CandidateSchema>;
 
 const InvitationBase = { auctionId: id, offeringIds: z.array(id).min(1), deadline: z.iso.datetime(), protocolVersion: z.literal(CONTRACT_VERSION) };

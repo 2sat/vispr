@@ -78,6 +78,14 @@ Streaming follows chat-completion chunk conventions and ends with `[DONE]`; auct
 
 Test against a real OpenAI-compatible client in addition to the native SDK, using controlled test adapters. Tool execution stays in the consuming application.
 
+## Classification batching and cache
+
+Library implementation and validation are complete; see [routing handoff](routing-workstream.md) for the integration sequence. Authenticated session persistence, atomic budget/award transactions, API dispatch and UI configuration remain integration work.
+
+The routing libraries implement [the batching/cache design](classification-design.md) within the routing workstream: one TypeSafe request for independent task/complexity/continuity judgments, and a bounded tenant-scoped exact cache of validated assessments. Do not cache eligible pools, offers or spend authorization. The cache key includes relevant request/history, session/capability context and model/question/preprocessing revisions. Reapply current policy, evidence, endpoint state and budgets after every hit.
+
+Start with a configurable five-minute TTL and 256-entry local cache behind a replaceable interface; production shared storage is platform-owned. Process-local hits on Vercel are opportunistic. Trace hit/miss, classification source, preprocessing/lookup/network/parsing times and paid attempts separately. Verify call batching and cache isolation/invalidation before enabling the live adapter.
+
 ## Task-aware continuity
 
 Jev returns independent judgments for task family/complexity and a continuity enum: `fresh`, `retain`, or `tool_cycle`. Include enough task history and the previous deployment's capabilities for the decision, but no secrets. Track confidence and question version.
@@ -131,7 +139,7 @@ See [the four-workstream split](workstreams.md) for ownership, shared-contract r
 | 1. Foundation | Monorepo, contracts, Supabase migrations/auth, Vercel config | Invited login works; uninvited access and cross-app reads fail; secrets absent from client |
 | 2. First live path | Shared execution service, OpenRouter adapter, SDK and compatible endpoint | Both clients stream the same request shape; elected provider is pinned; usage is reconciled |
 | 3. Catalog | Source connectors, serving inventory, canonical mapping, refresh UI | Reimports are idempotent; overlap is safe; malformed source preserves last good snapshot |
-| 4. Routing and continuity | Jev, policy editor, evidence scoring, sessions | Hard constraints always win; missing coverage toggle works; uncertainty follows settled defaults |
+| 4. Routing and continuity | Batched Jev, exact assessment cache, policy editor, evidence scoring, sessions | Hard constraints always win; missing coverage toggle works; uncertainty follows settled defaults |
 | 5. Auctions and budgets | Registration, bid strategies, atomic award/capacity/spend | One award under races; late bids rejected; losing bidders never receive payload; concurrent spend reservations respect ceilings |
 | 6. Demo and history | Five scenarios, traces, design preview, replay | All use production SDK path; no hardcoded winners; sample replay is clearly billable |
 | 7. Live acceptance | Vercel deployment, smoke checks and developer endpoint | Hosted families plus open model succeed; real self-hosted path verified when endpoint arrives |
@@ -153,3 +161,11 @@ Use application trace tables and structured Vercel logs initially; an extra obse
 3. [Supabase user invitations](https://supabase.com/docs/guides/auth/users) and [auth configuration](https://supabase.com/docs/guides/auth/general-configuration).
 4. [Artificial Analysis API](https://artificialanalysis.ai/api-reference).
 5. [Vercel Cron management](https://vercel.com/docs/cron-jobs/manage-cron-jobs).
+
+## Invocation source presets
+
+Implemented in the contracts/SDK/routing libraries: optional source tags map to app-owned named model pools, with exact-match validation and hard pool boundaries across cache hits, continuity and conservative fallback. Jev still classifies within the boundary; all hard constraints apply. See [source routing](source-routing.md) for configuration, SDK examples, validation and the platform/UI handoff. Durable configuration, HTTP transport and a Sources settings editor remain integration work.
+
+### Dynamic pool dimensions
+
+Source presets now accept inclusive latency and task-capacity/cost bands plus N independent inference-benchmark score bands. Model/deployment lists are optional restrictions. Each benchmark remains a coordinate in the Pareto sort space, with version, direction, evidence and freshness; the weighted quality summary is only an additional application preference/gate, not a replacement for these axes. Dynamic membership and hard bands are rechecked after semantic cache reuse and against final offers. See [source routing](source-routing.md) for schema/examples and the GUI handoff.

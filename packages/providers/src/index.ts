@@ -3,7 +3,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { streamText, jsonSchema, tool, Output, type ModelMessage } from "ai";
 import {
   DeploymentSchema,
-  InferenceRequestSchema,
+  ExecutionRequestSchema,
   UsageSchema,
   type Deployment,
   type InferenceRequest,
@@ -82,7 +82,7 @@ export class CompatibleAdapter implements ExecutionAdapter {
     signal: AbortSignal;
   }): AsyncIterable<ExecutionEvent> {
     const deployment = DeploymentSchema.parse(input.deployment);
-    const request = InferenceRequestSchema.parse(input.request);
+    const request = ExecutionRequestSchema.parse(input.request);
     if (!this.config.apiKey || deployment.status !== "active")
       throw new Error("Deployment is not configured or active");
     const caps = deployment.capabilities;

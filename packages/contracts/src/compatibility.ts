@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { InferenceRequestSchema, type InferenceRequest } from "./index";
+import { ExecutionRequestSchema, type InferenceRequest } from "./index";
 const CompatMessage = z.strictObject({
   role: z.enum(["system", "user", "assistant", "tool"]),
   content: z
@@ -119,7 +119,7 @@ export function translateChatCompletion(
     };
   });
   return {
-    request: InferenceRequestSchema.parse({
+    request: ExecutionRequestSchema.parse({
       ...defaults,
       policyId,
       messages,

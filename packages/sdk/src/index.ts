@@ -1,5 +1,6 @@
 import {
   InferenceRequestSchema,
+  InvocationSourceSchema,
   TraceEventSchema,
   type InferenceRequest,
   type TraceEvent,
@@ -147,4 +148,13 @@ export class Vispr implements VisprClient {
       ).json(),
     );
   }
+}
+
+/** Bind a component/agent step to a source without repeating the tag on each call. */
+export function withSource(client: VisprClient, source: string): VisprClient {
+  const tag = InvocationSourceSchema.parse(source);
+  return {
+    stream(request, options) { return client.stream({ ...request, source: tag }, options); },
+    cancel(requestId) { return client.cancel(requestId); },
+  };
 }
