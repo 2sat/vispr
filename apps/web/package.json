@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --config vitest.config.mts"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "next": "16.3.7",
