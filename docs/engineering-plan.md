@@ -20,7 +20,7 @@ Companion: [demo specification](demo-spec.md). This plan records the subsequent 
 | Session continuity | Jev chooses fresh auction, retain deployment, or retain through tool cycle |
 | Low confidence | Retain qualifying deployment; new tasks use configured conservative pool |
 | History | Trace/usage retained by default; payload retention per app; sample demo history enabled |
-| Spending | $10/day shared demo ceiling; $0.25/request including Jev and retries; configurable |
+| Spending | $10/day shared demo ceiling; $5/request including Jev and retries; configurable |
 | Quality evidence | Public benchmarks only; internal quality evaluations deferred |
 
 Simulated provider bids remain separate from real OpenRouter charges. Registered demo participants represent model/provider offerings; external companies are not actually submitting negotiated offers.
@@ -106,7 +106,7 @@ Shared vendor credentials live in deployment secrets. For the initial developer-
 
 ## Spending and history
 
-Default daily accounting uses UTC and records that timezone in the UI; make the boundary configurable. Reserve before paid calls using pricing snapshots, context estimates, maximum output and supported reasoning limits. Include Jev and retries in the $0.25 request total and all requests in the $10 daily total. OpenRouter spend, not a discounted simulated bid, controls the real budget gate.
+Default daily accounting uses UTC and records that timezone in the UI; make the boundary configurable. Reserve before paid calls using pricing snapshots, context estimates, maximum output and supported reasoning limits. Include Jev and retries in the $5 request total and all requests in the $10 daily total. OpenRouter spend, not a discounted simulated bid, controls the real budget gate.
 
 Settle against returned usage; keep conservative outstanding reservations for unknown charges until reconciliation. Unused reservations can be released when non-dispatch or cancellation is confirmed. Do not release ambiguous execution reservations solely because the local lease expired. Reject or require a compatible bounded configuration when the provider cannot support the needed spend bound. Explain that vendor billing reconciliation can reveal residual differences; never claim cancellation guarantees no further billing.
 

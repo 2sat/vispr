@@ -160,7 +160,7 @@ describe("platform ledger", () => {
   it("rejects charges above the per-request ceiling", async () => {
     await expect(
       db.query(
-        `select public.begin_execution('${app}','request-over','balanced',1,250001,9999999,10000000)`,
+        `select public.begin_execution('${app}','request-over','balanced',1,5000001,9999999,10000000)`,
       ),
     ).rejects.toThrow(/BUDGET_EXCEEDED/);
   });
@@ -237,5 +237,26 @@ describe("auction and capacity transactions", () => {
         )
       ).rows[0]!.status,
     ).toBe("released");
+  });
+});
+
+
+describe("raised demo request ceiling", () => {
+  it("allows $5 reservations, honors tighter policies, and keeps the shared $10 daily ceiling", async () => {
+    await db.exec("begin; delete from public.spend_reservations;");
+    const denied = async (key: string, amount: number, requestLimit: number, dailyLimit: number) => {
+      await db.exec("savepoint cap_check");
+      await expect(db.query(`select public.begin_execution('${app}','${key}','balanced',1,${amount},${requestLimit},${dailyLimit})`)).rejects.toThrow(/BUDGET_EXCEEDED/);
+      await db.exec("rollback to savepoint cap_check; release savepoint cap_check");
+    };
+    try {
+      await denied('policy-cap', 250001, 250000, 10000000);
+      await denied('hard-cap', 5000001, 10000000, 10000000);
+      const first = await db.query(`select public.begin_execution('${app}','five-dollar-first','balanced',1,5000000,5000000,10000000) as id`);
+      expect(first.rows).toHaveLength(1);
+      const second = await db.query(`select public.begin_execution('${app}','five-dollar-second','balanced',1,5000000,5000000,10000000) as id`);
+      expect(second.rows).toHaveLength(1);
+      await denied('daily-hard-cap', 1, 5000000, 20000000);
+    } finally { await db.exec("rollback"); }
   });
 });

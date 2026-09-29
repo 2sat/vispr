@@ -15,7 +15,7 @@ describe('eligibility and scoring', () => {
   it('normalizes task evidence and exposes fixed-bound utility terms', () => {
     const { input, context } = setup(); const result = selectCandidates(input, context)[0]!;
     expect(result.eligible).toBe(true); expect(result.quality).toBe(.8); expect(result.estimatedCostMicros).toBe(4600);
-    expect(result.score?.total).toBeCloseTo(.6 * .8 + .25 * (1 - 4600 / 250000) + .15 * (1 - 500 / 30000));
+    expect(result.score?.total).toBeCloseTo(.6 * .8 + .25 * (1 - 4600 / input.policy.requestBudgetMicros) + .15 * (1 - 500 / 30000));
   });
   it('filters image, schema, tool history, context and output requirements', () => {
     const { input, context } = setup();
