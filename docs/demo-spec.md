@@ -88,7 +88,7 @@ For bids, compute `utility = wQuality * quality + wCost * costUtility + wLatency
 
 ## Policy configuration
 
-Settled demo spend defaults: $10/day across the demo and $0.25 per request, including classification and retries. Both are configurable. Real upstream spend is budgeted separately from simulated auction offers.
+Settled demo spend defaults: $10/day across the demo and $5 per request, including classification and retries. Both are configurable. Real upstream spend is budgeted separately from simulated auction offers.
 
 GUI and SDK serialize the same versioned policy. Include:
 

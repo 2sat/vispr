@@ -1,7 +1,7 @@
 // Demo fixtures. Every value here is ILLUSTRATIVE — layout data, not measured results.
 // They are served only when VISPR_DEMO_FIXTURES=1 and the UI labels them as such.
 
-import type { PolicyPreset, RunSummary, Scenario, ScenarioId, TraceView } from './types';
+import type { FeatureSet, PolicyPreset, ProviderAuction, ProviderDeployment, RunSummary, Scenario, ScenarioId, TraceView } from './types';
 
 const basePolicy = {
   version: 3,
@@ -139,3 +139,41 @@ export const demoTrace: TraceView = {
   fallback: null,
   storedContent: 'metadata',
 };
+
+// ---- Provider console fixtures (operator-entered demo config, not vendor pricing) ----
+
+const allFeatures: FeatureSet = { streaming: true, tools: true, 'structured-output': true, images: true };
+const auction = (arrivedMs: number, outcome: ProviderAuction['outcome']): ProviderAuction => ({
+  auctionId: 'auc-[id]', at: null, arrivedMs, quotedInputUsdPerMtok: null, quotedOutputUsdPerMtok: null, outcome,
+});
+
+export const providerDeployments: ProviderDeployment[] = [
+  {
+    offeringId: 'off-google-pro', model: 'gemini-pro', modelVersion: '[model version]', kind: 'google', hostLabel: 'Google API',
+    endpoint: null, secretRef: 'secret://providers/google', contextTokens: null, outputTokens: null,
+    status: 'connected', lastCheckedAt: null, features: allFeatures, available: true, inFlight: 3,
+    bidPolicy: { strategy: 'bounded-discount', inputUsdPerMtok: 1, outputUsdPerMtok: 5, floorInputUsdPerMtok: 0.8, floorOutputUsdPerMtok: 4, maxDiscountPct: 20, surchargeAtFullPct: 30, capacity: 8, simulatedDelayMs: 40 },
+    recentAuctions: [auction(205, 'won'), auction(188, 'lost'), auction(212, 'won'), auction(317, 'late'), auction(196, 'won')],
+  },
+  {
+    offeringId: 'off-anthropic-sonnet', model: 'claude-sonnet', modelVersion: '[model version]', kind: 'anthropic', hostLabel: 'Anthropic API',
+    endpoint: null, secretRef: 'secret://providers/anthropic', contextTokens: null, outputTokens: null,
+    status: 'connected', lastCheckedAt: null, features: allFeatures, available: true, inFlight: 4,
+    bidPolicy: { strategy: 'capacity-adjusted', inputUsdPerMtok: 2, outputUsdPerMtok: 10, floorInputUsdPerMtok: 2, floorOutputUsdPerMtok: 10, maxDiscountPct: 10, surchargeAtFullPct: 30, capacity: 6, simulatedDelayMs: 60 },
+    recentAuctions: [auction(142, 'lost'), auction(150, 'won'), auction(139, 'won'), auction(161, 'lost')],
+  },
+  {
+    offeringId: 'off-hosted-opencoder', model: 'open-coder', modelVersion: '[model version]', kind: 'hosted-open', hostLabel: 'Hosted open-model',
+    endpoint: 'https://inference.example.com/v1', secretRef: 'secret://providers/hosted', contextTokens: null, outputTokens: null,
+    status: 'degraded', lastCheckedAt: null, features: { ...allFeatures, tools: false, images: false }, available: true, inFlight: 1,
+    bidPolicy: { strategy: 'fixed', inputUsdPerMtok: 0.5, outputUsdPerMtok: 1.5, floorInputUsdPerMtok: 0.5, floorOutputUsdPerMtok: 1.5, maxDiscountPct: 10, surchargeAtFullPct: 20, capacity: 4, simulatedDelayMs: 180 },
+    recentAuctions: [auction(341, 'late'), auction(290, 'lost'), auction(305, 'late')],
+  },
+  {
+    offeringId: 'off-local-qwen', model: 'qwen-coder-q4', modelVersion: '[model version] · 4-bit', kind: 'openai-compatible', hostLabel: 'Operator vLLM',
+    endpoint: 'http://127.0.0.1:8000/v1', secretRef: 'secret://providers/local-vllm', contextTokens: null, outputTokens: null,
+    status: 'unreachable', lastCheckedAt: null, features: { streaming: false, tools: false, 'structured-output': false, images: false }, available: true, inFlight: 0,
+    bidPolicy: { strategy: 'fixed', inputUsdPerMtok: 0.2, outputUsdPerMtok: 0.6, floorInputUsdPerMtok: 0.2, floorOutputUsdPerMtok: 0.6, maxDiscountPct: 10, surchargeAtFullPct: 20, capacity: 2, simulatedDelayMs: 0 },
+    recentAuctions: [],
+  },
+];
