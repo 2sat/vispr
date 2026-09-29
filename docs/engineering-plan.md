@@ -169,3 +169,9 @@ Implemented in the contracts/SDK/routing libraries: optional source tags map to 
 ### Dynamic pool dimensions
 
 Source presets now accept inclusive latency and task-capacity/cost bands plus N independent inference-benchmark score bands. Model/deployment lists are optional restrictions. Each benchmark remains a coordinate in the Pareto sort space, with version, direction, evidence and freshness; the weighted quality summary is only an additional application preference/gate, not a replacement for these axes. Dynamic membership and hard bands are rechecked after semantic cache reuse and against final offers. See [source routing](source-routing.md) for schema/examples and the GUI handoff.
+
+## MCP model-space proposals
+
+`POST /mcp` exposes authenticated `get_model_space` and `propose_static_manifold` tools. The MCP client model proposes fixed per-source `PoolCriteria`, preserving every selected benchmark as a hard independent axis alongside latency and cost ceilings. Proposals bind the authenticated app, policy version, catalog snapshot and preview request shape through a content hash. They are read-only drafts: no activation, policy persistence or inference dispatch. Unknown evidence blocks eligibility. See [endpoint setup and enforcement boundary](model-space-mcp.md).
+
+Follow-up integration: durable builder-approved source-policy versions, trusted catalog/endpoint evidence, and enforcement at selection, bid validation, award and dispatch. The execution service must keep rejecting source-tagged requests until that integration exists. Static criteria may admit new qualifying deployments, but no classifier or bidder may widen them automatically.
