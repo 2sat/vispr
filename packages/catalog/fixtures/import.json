@@ -1,0 +1,17 @@
+{
+  "sourceId": "synthetic-fixture",
+  "sourceUrl": "https://example.com/synthetic-engineering-fixture",
+  "format": "json",
+  "file": "fixtures/benchmarks.json",
+  "mapping": {
+    "id": "id", "model": "model", "configuration": "configuration",
+    "inputPrice": "input", "outputPrice": "output",
+    "benchmarks": [{ "field": "score", "benchmark": "synthetic-coding", "version": "fixture-v1", "min": 0, "max": 1 }]
+  },
+  "aliases": [
+    { "sourceId": "synthetic-fixture", "sourceModelId": "synthetic-model", "modelId": "synthetic/model-v1", "reviewed": true },
+    { "sourceId": "synthetic-fixture", "sourceModelId": "synthetic-other", "modelId": "synthetic/other-v1", "reviewed": true }
+  ],
+  "deployments": [],
+  "batchSize": 1
+}
