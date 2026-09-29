@@ -156,3 +156,71 @@ export interface TraceView {
   fallback: string | null;
   storedContent: 'metadata' | 'full';
 }
+
+// ---- Provider console ----
+
+export type ProviderKind = 'openai' | 'anthropic' | 'google' | 'hosted-open' | 'openai-compatible';
+export type ConnectionStatus = 'connected' | 'degraded' | 'unreachable';
+export type ProbedFeature = 'streaming' | 'tools' | 'structured-output' | 'images';
+export type FeatureSet = Record<ProbedFeature, boolean>;
+
+export interface BidPolicy {
+  strategy: BidStrategy;
+  inputUsdPerMtok: number;
+  outputUsdPerMtok: number;
+  floorInputUsdPerMtok: number;
+  floorOutputUsdPerMtok: number;
+  /** bounded-discount only, 0–50. */
+  maxDiscountPct: number;
+  /** capacity-adjusted only: surcharge applied at 100% utilization, 0–100. */
+  surchargeAtFullPct: number;
+  capacity: number;
+  simulatedDelayMs: number;
+}
+
+export interface ProviderAuction {
+  auctionId: string;
+  at: string | null;
+  arrivedMs: number;
+  quotedInputUsdPerMtok: number | null;
+  quotedOutputUsdPerMtok: number | null;
+  outcome: 'won' | 'lost' | 'late';
+}
+
+export interface ProviderDeployment {
+  offeringId: string;
+  model: string;
+  modelVersion: string;
+  kind: ProviderKind;
+  hostLabel: string;
+  /** null = the provider's default endpoint. */
+  endpoint: string | null;
+  /** Reference only; the secret itself never leaves the server. */
+  secretRef: string;
+  contextTokens: number | null;
+  outputTokens: number | null;
+  status: ConnectionStatus;
+  lastCheckedAt: string | null;
+  features: FeatureSet;
+  available: boolean;
+  inFlight: number;
+  bidPolicy: BidPolicy;
+  recentAuctions: ProviderAuction[];
+}
+
+export type BidQuote =
+  | { bids: true; inputUsdPerMtok: number; outputUsdPerMtok: number; reason: string; heldAtFloor: boolean }
+  | { bids: false; reason: string };
+
+export interface EndpointDraft {
+  kind: ProviderKind;
+  modelId: string;
+  endpoint: string;
+  secretRef: string;
+}
+
+export type ProbeResult = { ok: true; features: FeatureSet } | { ok: false; error: string };
+
+export type SaveResult =
+  | { ok: true; deployment: ProviderDeployment; persisted: boolean }
+  | { ok: false; error: string };
