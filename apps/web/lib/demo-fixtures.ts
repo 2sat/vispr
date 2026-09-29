@@ -170,9 +170,9 @@ export const providerDeployments: ProviderDeployment[] = [
     recentAuctions: [auction(341, 'late'), auction(290, 'lost'), auction(305, 'late')],
   },
   {
-    offeringId: 'off-local-qwen', model: 'qwen-coder-q4', modelVersion: '[model version] · 4-bit', kind: 'openai-compatible', hostLabel: 'Operator vLLM',
-    endpoint: 'http://127.0.0.1:8000/v1', secretRef: 'secret://providers/local-vllm', contextTokens: null, outputTokens: null,
-    status: 'unreachable', lastCheckedAt: null, features: { streaming: false, tools: false, 'structured-output': false, images: false }, available: true, inFlight: 0,
+    offeringId: 'off-local-qwen', model: 'qwen-coder-q4', modelVersion: '[model version] · 4-bit', kind: 'openai-compatible', hostLabel: 'Mock vLLM',
+    endpoint: 'https://qwen.example.com/v1', secretRef: 'secret://providers/mock-vllm', contextTokens: null, outputTokens: null,
+    status: 'connected', lastCheckedAt: null, features: { streaming: true, tools: true, 'structured-output': true, images: false }, available: true, inFlight: 0,
     bidPolicy: { strategy: 'fixed', inputUsdPerMtok: 0.2, outputUsdPerMtok: 0.6, floorInputUsdPerMtok: 0.2, floorOutputUsdPerMtok: 0.6, maxDiscountPct: 10, surchargeAtFullPct: 20, capacity: 2, simulatedDelayMs: 0 },
     recentAuctions: [],
   },
