@@ -47,6 +47,7 @@ export async function GET(req: Request) {
               reconciliation: "settled",
             },
           });
+          await db.rpc('release_request_capacity', { p_app: row.application_id, p_request: row.id });
           settled++;
         }
       }

@@ -153,6 +153,7 @@ beforeEach(() => {
               ? [{ policy: demoPolicy, version: 1 }]
               : [],
         );
+      if (path.endsWith("/routing_configs")) return Response.json([]);
       if (path.endsWith("/execution_offerings"))
         return Response.json([
           {

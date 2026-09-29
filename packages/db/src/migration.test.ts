@@ -241,6 +241,7 @@ describe("auction and capacity transactions", () => {
 });
 
 
+
 describe("raised demo request ceiling", () => {
   it("allows $5 reservations, honors tighter policies, and keeps the shared $10 daily ceiling", async () => {
     await db.exec("begin; delete from public.spend_reservations;");
@@ -258,5 +259,32 @@ describe("raised demo request ceiling", () => {
       expect(second.rows).toHaveLength(1);
       await denied('daily-hard-cap', 1, 5000000, 20000000);
     } finally { await db.exec("rollback"); }
+  });
+});
+
+describe('classification and execution ledger',()=>{
+  it('settles classification plus execution while keeping provider usage separate',async()=>{
+    const id=(await db.query<{id:string}>(`select public.begin_execution('${app}','classifier-known','balanced',1,10000,250000,10000000) id`)).rows[0]!.id;
+    expect((await db.query<{ok:boolean}>(`select public.authorize_classification('${app}','${id}',3000) ok`)).rows[0]!.ok).toBe(true);
+    expect((await db.query<{ok:boolean}>(`select public.authorize_classification('${app}','${id}',3000) ok`)).rows[0]!.ok).toBe(false);
+    await db.exec(`update public.inference_requests set classification_cost_micros=5,status='awarded' where id='${id}'; select public.mark_dispatched('${app}','${id}'); select public.finish_execution('${app}','${id}','completed','{"actualCostMicros":100,"reconciliation":"settled"}');`);
+    expect((await db.query<{cost:number}>(`select actual_cost_micros::integer cost from public.spend_reservations where request_id='${id}'`)).rows[0]!.cost).toBe(105);
+    expect((await db.query<{cost:number}>(`select (usage->>'actualCostMicros')::integer cost from public.inference_requests where id='${id}'`)).rows[0]!.cost).toBe(100);
+  });
+  it('retains an unknown classification charge when cancelled before execution',async()=>{
+    const id=(await db.query<{id:string}>(`select public.begin_execution('${app}','classifier-uncertain','balanced',1,10000,250000,10000000) id`)).rows[0]!.id;
+    await db.exec(`select public.authorize_classification('${app}','${id}',3000); select public.finish_execution('${app}','${id}','cancelled',null);`);
+    expect((await db.query<{status:string;amount:number;cost:number|null}>(`select status,amount_micros::integer amount,actual_cost_micros::integer cost from public.spend_reservations where request_id='${id}'`)).rows[0]).toEqual({status:'uncertain',amount:3000,cost:null});
+  });
+  it('stale cleanup never refunds dispatched classification',async()=>{
+    const id=(await db.query<{id:string}>(`select public.begin_execution('${app}','classifier-stale','balanced',1,10000,250000,10000000) id`)).rows[0]!.id;
+    await db.exec(`select public.authorize_classification('${app}','${id}',3000); update public.inference_requests set created_at=now()-interval '2 hours' where id='${id}'; select public.release_undispatched();`);
+    expect((await db.query<{status:string}>(`select status from public.spend_reservations where request_id='${id}'`)).rows[0]!.status).toBe('uncertain');
+    expect((await db.query<{ok:boolean}>(`select public.mark_dispatched('${app}','${id}') ok`)).rows[0]!.ok).toBe(false);
+  });
+  it('blocks browser publication and classification funding',async()=>{
+    await expect(asUser(alice,`select public.authorize_classification('${app}','${request}',100)`)).rejects.toThrow(/permission denied/);
+    await expect(asUser(alice,'select * from public.routing_configs')).rejects.toThrow(/permission denied/);
+
   });
 });

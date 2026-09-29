@@ -9,13 +9,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.117.2",
+    "@vispr/auction": "workspace:*",
     "@vispr/contracts": "workspace:*",
     "@vispr/db": "workspace:*",
     "@vispr/providers": "workspace:*",
+    "@vispr/routing": "workspace:*",
+    "@vispr/sdk": "workspace:*",
     "next": "16.3.7",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "server-only": "0.0.1"
+    "server-only": "0.0.1",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/react": "19.3.0",

@@ -10,15 +10,9 @@ import {
   type Usage,
 } from "@vispr/contracts";
 import { randomUUID } from "node:crypto";
-export class PlatformError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly status = 400,
-  ) {
-    super(message);
-  }
-}
+import { PlatformError } from "./platform-error";
+export { PlatformError } from "./platform-error";
+import { loadMarketplace, marketplaceAward } from "./marketplace";
 export function database() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secret =
@@ -81,7 +75,6 @@ export async function prepare(req: Request, raw: unknown, db = database()) {
   const app = await authenticate(req, db);
   const request = ExecutionRequestSchema.parse(raw);
   // Until routing is integrated, sessions would falsely imply continuity.
-  if (request.source) throw new PlatformError("NOT_CONFIGURED", "Source pool routing is pending service integration", 503);
   if (request.sessionId)
     throw new PlatformError(
       "NOT_CONFIGURED",
@@ -102,6 +95,22 @@ export async function prepare(req: Request, raw: unknown, db = database()) {
     );
   if (request.maxOutputTokens > policy.maxOutputTokens)
     throw new PlatformError("INVALID_REQUEST", "Output limit exceeds policy");
+  const marketplace = await loadMarketplace(db, app.id, policy, request);
+  if (marketplace) {
+    let id: string;
+    try {
+      id = await db.rpc<string>("begin_execution", {
+        p_app: app.id, p_key: request.idempotencyKey, p_policy: policy.id, p_version: policy.version,
+        p_amount: marketplace.reserveMicros, p_request_limit: policy.requestBudgetMicros, p_daily_limit: policy.dailyBudgetMicros,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "BUDGET_EXCEEDED") throw new PlatformError("BUDGET_EXCEEDED", "Shared spending limit exceeded", 429);
+      if (error instanceof Error && error.message === "IDEMPOTENCY_CONFLICT") throw new PlatformError("INVALID_REQUEST", "Idempotency key already used; retrieve its trace instead", 409);
+      throw error;
+    }
+    return { id, app, request, policy, db, marketplace, deployment: undefined, adapter: undefined };
+  }
+  if (request.source) throw new PlatformError("NOT_CONFIGURED", "Source routing requires an active reviewed pool", 503);
   const offerings = await db.call<
     {
       deployment: unknown;
@@ -242,6 +251,7 @@ export async function prepare(req: Request, raw: unknown, db = database()) {
     deployment,
     offering,
     db,
+    marketplace: undefined,
     adapter: new CompatibleAdapter({
       apiKey: key,
       baseURL: offering.base_url,
@@ -257,6 +267,8 @@ export async function* execute(
   let partial = false;
   let usage: Usage | undefined;
   let finalized = false;
+  let capacityToken: string | undefined;
+  let dispatched = false;
   const controller = new AbortController();
   const combined = AbortSignal.any([
     signal,
@@ -304,6 +316,24 @@ export async function* execute(
     return event;
   }
   try {
+    let deployment = run.deployment;
+    let adapter = run.adapter;
+    if (run.marketplace) {
+      const decisions = marketplaceAward({ id: run.id, applicationId: run.app.id, request: run.request, policy: run.policy, db: run.db, plan: run.marketplace, signal: combined });
+      try {
+        while (true) {
+          const next = await decisions.next();
+          if (next.done) {
+            deployment = next.value.deployment;
+            adapter = next.value.adapter;
+            capacityToken = next.value.capacityToken;
+            break;
+          }
+          yield await event(next.value);
+        }
+      } finally { await decisions.return(undefined as never); }
+    }
+    if (!deployment || !adapter) throw new PlatformError("NOT_CONFIGURED", "No execution award", 503);
     if (
       combined.aborted ||
       !(await run.db.rpc<boolean>("mark_dispatched", {
@@ -314,18 +344,19 @@ export async function* execute(
       controller.abort();
       throw new Error("Cancelled");
     }
+    dispatched = true;
     await run.db.call(
       `inference_requests?id=eq.${run.id}&application_id=eq.${run.app.id}`,
       {
         method: "PATCH",
         body: JSON.stringify({
-          transport: run.deployment.transport,
-          selected_deployment: run.deployment,
+          transport: deployment.transport,
+          selected_deployment: deployment,
         }),
       },
     );
-    for await (const delta of run.adapter.execute({
-      deployment: run.deployment,
+    for await (const delta of adapter.execute({
+      deployment,
       request: run.request,
       signal: combined,
     })) {
@@ -355,7 +386,7 @@ export async function* execute(
     });
     finalized = true;
     yield await event({ type: "completed" });
-  } catch {
+  } catch (error) {
     await run.db.rpc("finish_execution", {
       p_app: run.app.id,
       p_request: run.id,
@@ -365,16 +396,17 @@ export async function* execute(
     finalized = true;
     yield await event({
       type: "error",
-      code: combined.aborted ? "CANCELLED" : "PROVIDER_FAILED",
+      code: combined.aborted ? "CANCELLED" : error instanceof PlatformError ? error.code : "PROVIDER_FAILED",
       message: combined.aborted
         ? "Execution cancelled; charges may require reconciliation"
-        : "Execution failed; charges may require reconciliation",
+        : error instanceof PlatformError ? error.message : "Execution failed; charges may require reconciliation",
       partial,
     });
   } finally {
     clearInterval(timer);
     controller.abort();
     await activePoll;
+    if (capacityToken && (!dispatched || usage?.reconciliation === "settled")) await run.db.rpc("release_capacity", { p_token: capacityToken });
     if (!finalized)
       await run.db.rpc("finish_execution", {
         p_app: run.app.id,
