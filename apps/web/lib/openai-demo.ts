@@ -70,8 +70,11 @@ export async function generateDemoResponse(req: RunRequest, fetcher = fetch): Pr
   });
   if (!response.ok) {
     // Never expose raw provider errors, request bodies, or credentials to the browser.
+    const failure = await response.json().catch(() => null) as { error?: { code?: string; type?: string } } | null;
+    const exhausted = failure?.error?.code === 'insufficient_quota' || failure?.error?.type === 'insufficient_quota';
     const detail = response.status === 401 ? 'The OpenAI key was rejected.'
-      : response.status === 429 ? 'OpenAI quota or rate limit reached. Check the API account balance, or use the prepared demo.'
+      : response.status === 429 && exhausted ? 'OpenAI API quota is exhausted. Add API credits or raise the project quota, then try again. ChatGPT subscriptions do not include API credits.'
+      : response.status === 429 ? 'OpenAI is rate-limiting requests. Wait a moment and try again, or use the prepared demo.'
       : 'OpenAI could not complete this request. Try the prepared demo.';
     throw new Error(detail);
   }

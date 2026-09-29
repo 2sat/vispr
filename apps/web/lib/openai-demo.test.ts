@@ -68,6 +68,11 @@ it('never returns provider error payloads or silently substitutes canned output'
   expect(result).toMatchObject({ ok: false }); expect(JSON.stringify(result)).not.toContain('sensitive provider detail');
 });
 
+it('distinguishes exhausted account quota from temporary rate limiting', async () => {
+  await expect(generateDemoResponse(request, async () => Response.json({ error: { code: 'insufficient_quota' } }, { status: 429 }))).rejects.toThrow('Add API credits');
+  await expect(generateDemoResponse(request, async () => Response.json({ error: { code: 'rate_limit_exceeded' } }, { status: 429 }))).rejects.toThrow('rate-limiting');
+});
+
 it('provides a labeled illustrative trace for all five prepared scenarios', async () => {
   for (const id of ['support-triage', 'invoice-extraction', 'code-debugging', 'research-synthesis', 'ui-design']) {
     expect((await getRunTrace(`demo-${id}`))?.run.scenarioId).toBe(id);
