@@ -18,6 +18,7 @@ beforeEach(() => {
     if (url.pathname.endsWith('/api_keys')) return Response.json(url.searchParams.get('key_hash') === `eq.${hashApiKey('vispr_valid')}` ? [{ application_id: 'app-a' }] : []);
     if (url.pathname.endsWith('/applications')) return Response.json([{ id: 'app-a', owner_user_id: 'owner-a', organization_id: 'org-a', default_policy_id: demoPolicy.id }]);
     if (url.pathname.endsWith('/memberships')) return Response.json([{ role: 'builder' }]);
+    if (url.pathname.endsWith('/routing_configs')) { expect(url.searchParams.get('application_id')).toBe('eq.app-a'); return Response.json([]); }
     if (url.pathname.endsWith('/policy_versions')) {
       expect(url.searchParams.get('application_id')).toBe('eq.app-a');
       return Response.json(url.searchParams.get('policy_id') === `eq.${policy.id}` ? [{ policy, version: policy.version }] : []);

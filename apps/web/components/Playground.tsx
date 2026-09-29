@@ -99,7 +99,7 @@ export function Playground({ scenarios, policies, initialScenarioId, runScenario
               <PolicySettings policy={policy} note={scenario.evidenceNote} />
             </Disclosure>
             <label htmlFor="policy" className="muted">Policy</label>
-            <select id="policy" className="select" value={policyId} onChange={(e) => setPolicyId(e.target.value)}>
+            <select id="policy" className="select" value={policyId} onChange={(e) => { setPolicyId(e.target.value); setRun(null); setError(null); }}>
               {policies.map((p) => (
                 <option key={p.id} value={p.id}>{p.id}</option>
               ))}
@@ -155,7 +155,7 @@ function PolicySettings({ policy, note }: { policy: PolicyPreset; note: string }
       </div>
       <div className="notice">
         <span>{note}</span>
-        <Link href={`/applications/policies/${policy.id}`}>Edit policy →</Link>
+        <span>Policy editing is not yet available. Choose a preset above.</span>
       </div>
     </div>
   );
@@ -214,7 +214,7 @@ function RunResult({ run }: { run: RunSummary }) {
         <div className="stat"><span>{run.generation ? 'Generation time' : 'Elapsed'}</span><strong className="mono">{fmtMs(run.generation?.elapsedMs ?? run.timing.totalMs)}</strong></div>
         <div className="stat"><span>Est. cost</span><strong className="mono">{fmtUsd(run.generation?.estimatedCostUsd ?? c.estimatedUpstreamUsd)}</strong></div>
       </div>
-      <Link href={`/runs/${run.runId}`} className="btn-outline">Why this model? <span aria-hidden="true">→</span></Link>
+      <Link href={`/runs/${run.runId}?policy=${encodeURIComponent(run.policyId)}`} className="btn-outline">Why this model? <span aria-hidden="true">→</span></Link>
       <Disclosure title="Timing & cost details" variant="inline">
         <dl className="kv">
           {run.generation && <><dt>OpenAI tokens in / out</dt><dd>{fmtTokens(run.generation.inputTokens)} / {fmtTokens(run.generation.outputTokens)}</dd></>}

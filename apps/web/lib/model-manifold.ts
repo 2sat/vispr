@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { InvocationSourceSchema, PoolCriteriaSchema, SourceRoutingSchema, type Policy } from '@vispr/contracts';
+import { InvocationSourceSchema, PoolCriteriaSchema, SourceRoutingSchema, type Policy, type CatalogSnapshot } from '@vispr/contracts';
+import { selectCandidates } from '@vispr/routing';
+import type { RoutingConfig } from './marketplace';
 import discovery from '../../../docs/data/demo-pool-discovery.json';
 
 const tokenCount = z.number().int().nonnegative().max(10_000_000);
@@ -9,6 +11,7 @@ export const ProposalInputSchema = z.strictObject({
   policyId: z.string().min(1).max(200), policyVersion: z.number().int().positive(),
   snapshotId: z.string().min(1).max(200), source: InvocationSourceSchema,
   workload: WorkloadSchema, criteria: PoolCriteriaSchema,
+  task: z.enum(['support', 'extraction', 'coding', 'research', 'design', 'other']).optional(),
   rationale: z.string().min(1).max(4000),
 });
 export type ProposalInput = z.infer<typeof ProposalInputSchema>;
@@ -19,11 +22,18 @@ function canonical(value: unknown): string {
   if (value !== null && typeof value === 'object') return '{' + Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => JSON.stringify(k) + ':' + canonical(v)).join(',') + '}';
   return JSON.stringify(value);
 }
-export function modelSpace(applicationId: string, policy: Policy) {
+export interface ReviewedSpace { catalog: CatalogSnapshot; config: RoutingConfig }
+export function spaceSnapshotId(reviewed?: ReviewedSpace) {
+  return reviewed ? createHash('sha256').update(canonical(reviewed)).digest('hex') : snapshotId;
+}
+export function modelSpace(applicationId: string, policy: Policy, reviewed?: ReviewedSpace) {
   return {
-    applicationId, policy, snapshotId, retrievedAt: discovery.retrievedAt, sourceUrl: discovery.sourceUrl,
+    applicationId, policy, snapshotId: spaceSnapshotId(reviewed), retrievedAt: reviewed?.catalog.createdAt ?? discovery.retrievedAt,
+    discoveryProvenance: { retrievedAt: discovery.retrievedAt, sourceUrl: discovery.sourceUrl },
     units, criteriaSchema: z.toJSONSchema(PoolCriteriaSchema),
-    evidenceStatus: 'discovery-only', benchmarkAxes: [],
+    evidenceStatus: reviewed ? 'reviewed-configured; freshness must be checked' : 'discovery-only',
+    benchmarkAxes: reviewed ? Object.entries(reviewed.config.profiles).flatMap(([task, axes]) => axes.map(axis => ({ task, ...axis }))) : [],
+    reviewedSpace: reviewed ? { catalog: reviewed.catalog, profiles: reviewed.config.profiles, metrics: reviewed.config.metrics, sourceRouting: reviewed.config.sourceRouting, maximumEvidenceAgeMs: reviewed.config.maximumEvidenceAgeMs, maximumMetricsAgeMs: reviewed.config.maximumMetricsAgeMs } : null,
     models: discovery.models.map(model => ({
       id: model.id, name: model.name, contextTokens: model.context_length,
       advertisedInputUsdPerMillionTokens: Number(model.pricing.prompt) * 1e6,
@@ -40,9 +50,9 @@ export function modelSpace(applicationId: string, policy: Policy) {
     ],
   };
 }
-export function proposeManifold(applicationId: string, policy: Policy, raw: unknown) {
+export function proposeManifold(applicationId: string, policy: Policy, raw: unknown, reviewed?: ReviewedSpace) {
   const input = ProposalInputSchema.parse(raw);
-  if (input.snapshotId !== snapshotId) throw new Error('Catalog snapshot changed. Read the model space again.');
+  if (input.snapshotId !== spaceSnapshotId(reviewed)) throw new Error('Catalog snapshot changed. Read the model space again.');
   if (input.policyId !== policy.id || input.policyVersion !== policy.version) throw new Error('Policy changed or is unavailable. Read the model space again.');
   const { criteria, workload } = input;
   if (criteria.latencyMs?.max === undefined || criteria.estimatedCostMicros?.max === undefined) throw new Error('A static manifold needs explicit latency and request-cost ceilings.');
@@ -56,10 +66,18 @@ export function proposeManifold(applicationId: string, policy: Policy, raw: unkn
     ...criteria,
     ...(criteria.benchmarks ? { benchmarks: criteria.benchmarks.map(axis => ({ ...axis, required: true })) } : {}),
   };
-  const identity = { applicationId, policyId: policy.id, policyVersion: policy.version, snapshotId, source: input.source, workload, criteria: effectiveCriteria };
+  const task = input.task ?? reviewed?.config.conservativePool.task ?? 'other';
+  if (reviewed) for (const axis of criteria.benchmarks ?? []) {
+    const matching = Object.values(reviewed.config.profiles).flat().filter(rule => rule.benchmark === axis.benchmark && rule.version === axis.version);
+    if (!matching.length || matching.some(rule => rule.minimum !== axis.minimum || rule.maximum !== axis.maximum || rule.higherIsBetter !== axis.higherIsBetter)) throw new Error('Use a reviewed benchmark identity and normalization.');
+  }
+  const identity = { applicationId, policyId: policy.id, policyVersion: policy.version, snapshotId: spaceSnapshotId(reviewed), source: input.source, workload, task, criteria: effectiveCriteria };
   const proposalId = createHash('sha256').update(canonical(identity)).digest('hex');
   const poolId = `manifold-${proposalId.slice(0, 24)}`;
-  const sourceRouting = SourceRoutingSchema.parse({ pools: [{ id: poolId, criteria: effectiveCriteria }], bindings: [{ source: input.source, poolId }] });
+  const sourceRouting = SourceRoutingSchema.parse({
+    pools: [...(reviewed?.config.sourceRouting?.pools ?? []).filter(pool => pool.id !== poolId), { id: poolId, criteria: effectiveCriteria }],
+    bindings: [...(reviewed?.config.sourceRouting?.bindings ?? []).filter(binding => binding.source !== input.source), { source: input.source, poolId }],
+  });
   const preview = discovery.models.map(model => {
     const advertisedCostMicros = Math.ceil((Number(model.pricing.prompt) * workload.inputTokens + Number(model.pricing.completion) * workload.maxOutputTokens) * 1e6);
     const exclusionReasons: string[] = [];
@@ -72,11 +90,22 @@ export function proposeManifold(applicationId: string, policy: Policy, raw: unkn
     if (model.top_provider.max_completion_tokens !== null && workload.maxOutputTokens > model.top_provider.max_completion_tokens) exclusionReasons.push('Workload exceeds advertised output limit');
     return { modelId: model.id, advertisedCostMicros, status: exclusionReasons.length ? 'excluded' : 'unverified', exclusionReasons, missingEvidence: ['registered deployment', 'fresh full-completion latency and binding cost', ...(criteria.benchmarks ?? []).map(axis => `benchmark:${axis.benchmark}@${axis.version}`), ...(criteria.requiredCapabilities ?? []).map(capability => `deployment capability:${capability}`)] };
   });
+  const reviewedCandidates = reviewed ? selectCandidates({
+    request: { policyId: policy.id, idempotencyKey: proposalId, source: input.source, messages: [{ role: 'user', content: 'Manifold preview' }], maxOutputTokens: workload.maxOutputTokens },
+    policy, assessment: null, catalog: reviewed.catalog,
+  }, {
+    estimateInputTokens: () => workload.inputTokens, metrics: reviewed.config.metrics,
+    profiles: reviewed.config.profiles, now: Date.now(), maximumEvidenceAgeMs: reviewed.config.maximumEvidenceAgeMs,
+    maximumMetricsAgeMs: reviewed.config.maximumMetricsAgeMs, remainingRequestBudgetMicros: policy.requestBudgetMicros,
+    poolCriteria: effectiveCriteria, fallbackTask: task,
+  }) : [];
   return {
     schemaVersion: '1', proposalId, ...identity, rationale: input.rationale,
     status: 'proposed', active: false, persisted: false, sourceRouting, preview,
-    eligibleDeploymentIds: [],
-    activationBlockers: ['Builder approval and durable source-binding integration required', 'Verified deployment metrics and benchmark evidence required', 'Live source routing and auction enforcement are not yet integrated in the execution service'],
+    eligibleDeploymentIds: [], reviewedCandidates,
+    previewEligibleDeploymentIds: reviewedCandidates.filter(candidate => candidate.eligible).map(candidate => candidate.deploymentId),
+    activationBlockers: ['Builder approval and reviewed routing publication required', ...(!reviewed ? ['Verified deployment metrics and benchmark evidence required'] : []), 'Live capacity, registration, classifier allowance and actual-request bounds must pass execution checks'],
+    publication: { endpoint: `/api/applications/${encodeURIComponent(applicationId)}/routing`, method: 'POST', reviewRequired: true, instruction: 'Merge sourceRouting into the reviewed routing config and publish through the authenticated builder endpoint. Preserve the catalog and other config fields. MCP does not publish or activate.' },
     enforcement: {
       geometry: 'intersection of independent hard bands', membership: 'dynamic against fixed criteria',
       onMissingEvidence: 'exclude', onEmptyPool: 'fail closed; never widen bands',

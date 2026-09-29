@@ -1,5 +1,46 @@
 # Presenter demo
 
+## Local rehearsal
+
+Install dependencies with `pnpm install --frozen-lockfile`. Set
+`VISPR_DEMO_FIXTURES=1` in `apps/web/.env.local`, then run `pnpm dev` and open
+`http://localhost:3000/playground`. The root URL redirects there. The IBM Plex
+fonts are bundled with the application, so startup does not fetch Google fonts.
+
+Prepared demo works without paid credentials. Its responses are fixed samples;
+editing the prompt does not generate a new answer or assessment. Policy presets
+re-score the illustrative bids. The selected policy and winner stay consistent
+between the result card and **Why this model?**. Policy editing is not available.
+
+## Six-minute audience walkthrough
+
+1. **0:00–0:45 — Playground.** Choose **Code debugging**, **Prepared demo**, and
+   `quality-first`. Read the duration-conversion bug. Say: “This walkthrough uses
+   prepared responses and simulated routing to show how a policy changes a decision.”
+2. **0:45–1:30 — Run.** Click **Run**. Show the sample patch and the illustrative
+   `gemini-pro` winner. Expand **Policy settings** to show quality/cost/speed priorities.
+3. **1:30–2:45 — Explain.** Click **Why this model?**. Show task assessment,
+   exclusions, valid offers and the late rejected bid. These are example evidence
+   and timings, not measurements from a live marketplace request.
+4. **2:45–4:00 — Change the requirement.** Return to **Playground**, keep Code
+   debugging, choose `cheapest-qualified` and click **Run**. The illustrative
+   winner changes to `gpt-mini`. Open **Why this model?** to confirm the selected
+   policy and awarded bid. The response stays the same prepared sample.
+5. **4:00–5:00 — Audience choice.** Offer **Invoice extraction** for JSON or
+   **UI design & prototyping** for an HTML preview. Run their choice. For design,
+   show **Preview** and **Source**; scripts are disabled in the preview.
+6. **5:00–6:00 — Marketplace context.** Open **Manage → Model catalog** to show
+   sourced inventory and evidence gaps. Optionally show **Manage → Provider console**
+   as illustrative configuration. Close: “One interface, policy-driven selection,
+   and a decision you can inspect.”
+
+If OpenAI presenter credentials are configured, switch to **OpenAI response**
+for an edited prompt. Explain that only response generation is real: the auction
+winner, assessment and routing timings remain simulated, and the actual response
+model is listed separately. Rehearse this mode before the presentation.
+
+## Optional OpenAI response setup
+
 The deployed playground supports two response modes. Prepared demo returns labeled
 sample responses. OpenAI response generates a new response for the edited prompt
 and bundled sample attachments. Classification, candidates, auctions and routing

@@ -10,7 +10,8 @@
     "build": "pnpm --filter @vispr/web build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "smoke:hosted": "node --experimental-transform-types scripts/hosted-smoke.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
