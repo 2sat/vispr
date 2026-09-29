@@ -1,0 +1,15 @@
+{
+  "connected": true,
+  "model": "qwen3.5:9b",
+  "message": {
+    "role": "assistant",
+    "content": "Vispr local model connected."
+  },
+  "usage": {
+    "prompt_tokens": 22,
+    "completion_tokens": 7,
+    "total_tokens": 29
+  },
+  "streaming": false,
+  "checkedAt": "2026-09-29T22:35:51.627296+00:00"
+}
