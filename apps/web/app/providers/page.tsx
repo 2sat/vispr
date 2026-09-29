@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { AppHeader } from '../../components/AppHeader';
 import { providerPreview } from '../../lib/provider-preview';
 import proof from '../../lib/local-model-verification.json';
+import { ProviderTest } from '../../components/ProviderTest';
+import { issueProviderTestToken } from '../../lib/provider-test-token';
 
 export const metadata: Metadata = { title: 'Your provider workspace · Vispr' };
 export const dynamic = 'force-dynamic';
@@ -28,6 +30,7 @@ export default async function ProvidersPage() {
           <div className="card"><p className="eyebrow">Concurrent capacity</p><p className="provider-number">{provider.capacity}<span> request</span></p><p className="fine">Protects your Mac’s resources</p></div>
           <div className="card"><p className="eyebrow">Connection response</p><p className="provider-number">{provider.latencyMs === null ? '—' : provider.latencyMs}<span>{provider.latencyMs === null ? '' : ' ms'}</span></p><p className="fine">Live reachability check · {date(provider.checkedAt)}</p></div>
         </section>
+        {process.env.SELF_HOSTED_API_KEY && <ProviderTest token={issueProviderTestToken(process.env.SELF_HOSTED_API_KEY)} />}
         <div className="provider-columns">
           <section className="card provider-offering"><div className="provider-section-title"><h2>Model offering</h2><span className="chip">Self-hosted</span></div><h3>Qwen 3.5 · 9B</h3><p className="mono muted">{provider.deployment.inferenceModelId}</p><div className="provider-notice"><span aria-hidden="true">◷</span><div><strong>Awaiting streaming connection</strong><p>Your model can answer connection tests. Streaming support is required before it can compete for routed requests.</p></div></div><dl className="kv provider-details"><dt>Availability</dt><dd>{provider.connected ? 'Reachable now' : 'Device unreachable'}</dd><dt>Text completions</dt><dd>Verified</dd><dt>Output limit</dt><dd>2,048 tokens</dd><dt>Streaming</dt><dd>Pending</dd><dt>Tools / vision / structured output</dt><dd>Not verified</dd><dt>Bid pricing</dt><dd>Not configured</dd><dt>Auction participation</dt><dd>Pending activation</dd></dl></section>
           <section className="card provider-verification"><div className="provider-section-title"><h2>Connection verification</h2><span className="provider-status provider-status--online">Passed at setup</span></div><p className="provider-lead">A real request from the hosted Vispr service reached your MacBook and returned a model response.</p><div className="provider-path"><span>Vispr</span><span aria-hidden="true">→</span><span>Secure connection</span><span aria-hidden="true">→</span><span>Your MacBook</span></div><div className="provider-proof"><p className="eyebrow">Model response</p><blockquote>{proof.message.content}</blockquote><p className="fine">{proof.usage.prompt_tokens} input tokens · {proof.usage.completion_tokens} output tokens · {date(proof.checkedAt)}</p></div><p className="fine">This setup test is separate from marketplace traffic. Refresh connection checks current reachability without generating another response.</p></section>
