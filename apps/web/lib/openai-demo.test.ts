@@ -18,6 +18,19 @@ const generated = {
 beforeEach(() => { jar.clear(); vi.stubEnv('VISPR_DEMO_FIXTURES', '1'); vi.stubEnv('VISPR_DEMO_ACCESS_CODE', secret); vi.stubEnv('OPENAI_API_KEY', 'sk-fixture-only'); });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it('changes the prepared winner with the policy and preserves it in the trace', async () => {
+  const quality = await runScenario(request);
+  const cheap = await runScenario({ ...request, policyId: 'cheapest-qualified' });
+  expect(quality.ok && quality.run.winner.model).toBe('gemini-pro');
+  expect(cheap.ok && cheap.run.winner.model).toBe('gpt-mini');
+  if (!cheap.ok) throw new Error('Prepared run failed');
+  const trace = await getRunTrace(cheap.run.runId, cheap.run.policyId);
+  expect(trace?.policy.id).toBe('cheapest-qualified');
+  expect(trace?.run.winner).toEqual(cheap.run.winner);
+  expect(trace?.auction.bids.find(b => b.status === 'awarded')?.model).toBe('gpt-mini');
+  expect(await getRunTrace(cheap.run.runId, 'unknown-policy')).toBeNull();
+});
+
 it('does not dispatch a paid request without the presenter code', async () => {
   const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
   const result = await runScenario({ ...request, live: true });

@@ -1,4 +1,6 @@
 :root {
+  --font-sans: 'IBM Plex Sans';
+  --font-mono: 'IBM Plex Mono';
   --bg: #f4f3ee;
   --surface: #ffffff;
   --surface-sunk: #fbfaf7;

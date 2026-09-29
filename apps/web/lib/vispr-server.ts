@@ -22,7 +22,7 @@ export async function runScenario(req: RunRequest): Promise<RunResult> {
 
   if (useFixtures()) {
     const run = fixtureRun(req.scenarioId, req.policyId);
-    if (!req.live) return { ok: true, run };
+    if (!req.live) return { ok: true, run: illustrativeTrace(run).run };
     const secret = process.env.VISPR_DEMO_ACCESS_CODE ?? '';
     const jar = await cookies();
     if (!presenterAuthorized(req.presenterCode, jar.get('vispr-demo-presenter')?.value, secret)) {
@@ -59,10 +59,13 @@ export async function runScenario(req: RunRequest): Promise<RunResult> {
   return { ok: false, error: 'Live SDK path is not wired yet.' };
 }
 
-export async function getRunTrace(runId: string): Promise<TraceView | null> {
+export async function getRunTrace(runId: string, policyId?: string): Promise<TraceView | null> {
   if (useFixtures()) {
     const scenario = scenarios.find(s => `demo-${s.id}` === runId);
-    if (scenario) return illustrativeTrace(fixtureRun(scenario.id, scenario.defaultPolicyId));
+    if (scenario) {
+      if (policyId && !policies.some(p => p.id === policyId)) return null;
+      return illustrativeTrace(fixtureRun(scenario.id, policyId ?? scenario.defaultPolicyId));
+    }
     if (!/^openai-[0-9a-f-]{36}$/.test(runId)) return null;
     const jar = await cookies();
     const secret = process.env.VISPR_DEMO_ACCESS_CODE ?? '';
@@ -84,7 +87,9 @@ function illustrativeTrace(run: RunSummary): TraceView {
   trace.policy = policies.find(p => p.id === run.policyId)!;
   trace.assessment.taskFamilyLabel = scenario.name;
   trace.assessment.extracted.outputFormat = scenario.outputKind;
-  const winner = rankBids(trace.auction.bids, trace.policy.weights)[0];
+  const ranked = rankBids(trace.auction.bids, trace.policy.weights);
+  trace.run.bidCount = ranked.length;
+  const winner = ranked[0];
   if (winner) {
     trace.run.winner = { model: winner.model, provider: winner.provider };
     trace.auction.bids = trace.auction.bids.map(b => ({ ...b, status: b.status === 'rejected' ? 'rejected' : b.deploymentId === winner.deploymentId ? 'awarded' : 'valid' }));
