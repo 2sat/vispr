@@ -10,7 +10,7 @@ const manageLinks = [
 ];
 
 interface AppHeaderProps {
-  active: 'playground' | 'trace' | 'applications' | 'providers' | 'providers-console' | 'catalog' | 'explorer';
+  active: 'playground' | 'trace' | 'applications' | 'providers' | 'providers-console' | 'catalog' | 'explorer' | 'flow';
   traceHref: string;
   role: 'Builder' | 'Operator' | 'Provider';
 }
@@ -27,6 +27,7 @@ export function AppHeader({ active, traceHref, role }: AppHeaderProps) {
           Request trace
         </Link>
         <Link href="/explorer" className="nav-link" aria-current={active === 'explorer' ? 'page' : undefined}>Model explorer</Link>
+        <Link href="/how-it-works" className="nav-link" aria-current={active === 'flow' ? 'page' : undefined}>How it works</Link>
         <ManageMenu active={active} />
         {active === 'providers' && <Link href="/providers" className="nav-link" aria-current="page">Providers</Link>}
       </nav>
